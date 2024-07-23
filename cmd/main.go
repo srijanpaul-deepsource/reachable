@@ -17,7 +17,7 @@ func getTsLanguage(langName string) (*sitter.Language, error) {
 		return treeSitterPy.GetLanguage(), nil
 	}
 
-	return nil, fmt.Errorf("Language not supported: %s", langName)
+	return nil, fmt.Errorf("language not supported: %s", langName)
 }
 
 type Config struct {
@@ -28,28 +28,42 @@ type Config struct {
 
 func test() {
 	code := `
-x = 'x'
+def f():
+	return
+
 def foo():
-		def bar():
-				a = 1
-			return 1	
-		return bar()	
-		
-def add(a, b):
-		delta = 5
-		return a + b + 5
-		
-y, z = 1, 2
-a, b: Tuple[int, int] = 1, 2
+	f()
+
+def baz():
+	return foo()
 `
+
 	py, err := sniper.ParsePython(code)
 	if err != nil {
 		panic(err)
 	}
 
-	graph := py.Module().GlobalScope.ToDotGraph()
+	queryStr := `(call) @call`
+	q, _ := sitter.NewQuery([]byte(queryStr), py.Module().TsLanguage)
+	qc := sitter.NewQueryCursor()
+	qc.Exec(q, py.Module().Ast)
 
-	fmt.Println(graph.String())
+	for {
+		match, ok := qc.NextMatch()
+		if !ok {
+			break
+		}
+
+		match = qc.FilterPredicates(match, py.Module().Source)
+		cg := sniper.NewCallGraph(py)
+		for _, c := range match.Captures {
+			node := c.Node
+			cgNode := cg.FindCallGraph(node)
+			graph := cgNode.ToDotGraph(cg)
+			fmt.Println(graph.String())
+		}
+
+	}
 }
 
 func main() {

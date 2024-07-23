@@ -16,18 +16,21 @@ func (py *Python) Module() *Module {
 	return py.module
 }
 
-func (p *Python) GetTreeSitterLanguage() *sitter.Language {
-	return treeSitterPy.GetLanguage()
-}
-
 func ParsePython(source string) (*Python, error) {
 	sourceBytes := []byte(source)
-	ast, err := sitter.ParseCtx(context.TODO(), sourceBytes, treeSitterPy.GetLanguage())
+	python := &Python{module: &Module{
+		Source:     sourceBytes,
+		TsLanguage: treeSitterPy.GetLanguage(),
+	}}
+
+	ast, err := sitter.ParseCtx(
+		context.Background(), sourceBytes, python.module.TsLanguage,
+	)
+
 	if err != nil {
 		return nil, err
 	}
-
-	python := &Python{module: &Module{Ast: ast, GlobalScope: nil, Source: sourceBytes}}
+	python.module.Ast = ast
 
 	scope, scopeMap := makeLexicalScopeTree(python, ast)
 	python.module.GlobalScope = scope
@@ -83,4 +86,43 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 	}
 
 	return nil
+}
+
+func (py *Python) IsCallExpr(node *sitter.Node) bool {
+	return node.Type() == "call"
+}
+
+func (py *Python) IsFunctionDef(node *sitter.Node) bool {
+	return node.Type() == "function_definition" || node.Type() == "lambda"
+}
+
+func (py *Python) GetCalleeName(node *sitter.Node) *string {
+	function := node.ChildByFieldName("function")
+	if function == nil {
+		return nil
+	}
+
+	if function.Type() == "identifier" {
+		name := function.Content(py.module.Source)
+		return &name
+	}
+
+	return nil
+}
+
+func (py *Python) BodyOfFunction(node *sitter.Node) *sitter.Node {
+	typ := node.Type()
+	if typ != "function_definition" && typ != "lambda" {
+		return nil
+	}
+
+	return node.ChildByFieldName("body")
+}
+
+func (py *Python) NameOfFunction(node *sitter.Node) string {
+	if node.Type() != "function_definition" {
+		return node.ChildByFieldName("name").Content(py.module.Source)
+	}
+
+	return ""
 }

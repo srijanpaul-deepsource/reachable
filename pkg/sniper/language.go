@@ -13,4 +13,9 @@ type Module struct {
 type Language interface {
 	Module() *Module
 	GetDecls(*sitter.Node) []Decl
+	IsCallExpr(*sitter.Node) bool
+	IsFunctionDef(*sitter.Node) bool
+	GetCalleeName(*sitter.Node) *string
+	BodyOfFunction(*sitter.Node) *sitter.Node
+	NameOfFunction(*sitter.Node) string
 }
