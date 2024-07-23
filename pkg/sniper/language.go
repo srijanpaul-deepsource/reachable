@@ -1,8 +1,11 @@
 package sniper
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 
+	"github.com/emicklei/dot"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -28,6 +31,34 @@ type Scope struct {
 	Symbols          map[string]*sitter.Node
 	ImportStatements map[string]*sitter.Node
 	AstNode          *sitter.Node
+}
+
+func (s *Scope) ToDotGraph() *dot.Graph {
+	g := dot.NewGraph()
+	s.toDotNode(g)
+	return g
+}
+
+func (s *Scope) toDotNode(g *dot.Graph) dot.Node {
+	current := g.Node(fmt.Sprintf("%p", &s))
+
+	labels := []string{}
+	for k := range s.Symbols {
+		labels = append(labels, k)
+	}
+
+	if len(labels) == 0 {
+		labels = []string{"(empty)"}
+	}
+
+	current = current.Attr("label", strings.Join(labels, ", "))
+
+	for _, child := range s.Children {
+		child := child.toDotNode(g)
+		g.Edge(current, child)
+	}
+
+	return current
 }
 
 // Lookup finds a symbol starting from the current scope and going up

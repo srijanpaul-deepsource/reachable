@@ -6,6 +6,8 @@ import (
 	"os"
 
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/srijanpaul-deepsource/reachable/pkg/sniper"
+
 	treeSitterPy "github.com/smacker/go-tree-sitter/python"
 )
 
@@ -24,7 +26,37 @@ type Config struct {
 	Files       []string
 }
 
+func test() {
+	code := `
+x = 'x'
+def foo():
+		def bar():
+				a = 1
+			return 1	
+		return bar()	
+		
+def add(a, b):
+		delta = 5
+		return a + b + 5
+		
+y, z = 1, 2
+a, b: Tuple[int, int] = 1, 2
+`
+	py, err := sniper.ParsePython(code)
+	if err != nil {
+		panic(err)
+	}
+
+	scope, _ := py.GetScopeTree()
+	graph := scope.ToDotGraph()
+
+	fmt.Println(graph.String())
+}
+
 func main() {
+	test()
+	os.Exit(0)
+
 	// Define flags
 	repoRoot := flag.String("repo-root", "", "Root directory of the repository")
 	language := flag.String("language", "", "Programming language to be used")
@@ -56,4 +88,7 @@ func main() {
 		ProjectRoot: *repoRoot,
 		Files:       files,
 	}
+
+	fmt.Sprintf("%#v", config)
+
 }
