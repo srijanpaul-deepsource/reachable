@@ -74,12 +74,6 @@ func (s *Scope) Lookup(name string) *sitter.Node {
 	return nil
 }
 
-type Language interface {
-	GetTreeSitterLanguage() *sitter.Language
-	GetScopeTree() (*Scope, ScopeOfNode)
-	GetDecls(*sitter.Node) []Decl
-}
-
 // makeLexicalScopeTree generates a scope tree from the AST, along with a mapping from
 // block nodes to scope objects
 func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode) {
@@ -146,15 +140,13 @@ func findNearestBlockNode(node *sitter.Node) *sitter.Node {
 }
 
 // GetScope finds the nearest surrounding scope of a node
-func GetScope(l Language, node *sitter.Node) *Scope {
-	_, scopeOfNode := l.GetScopeTree()
-
+func GetScope(module *Module, node *sitter.Node) *Scope {
 	nearestBlock := findNearestBlockNode(node)
 	if nearestBlock == nil {
 		return nil
 	}
 
-	nearestScope, exists := scopeOfNode[nearestBlock]
+	nearestScope, exists := module.ScopeOfNode[nearestBlock]
 	if !exists {
 		return nil
 	}

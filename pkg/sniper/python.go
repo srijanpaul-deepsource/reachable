@@ -9,28 +9,29 @@ import (
 )
 
 type Python struct {
-	ast         *sitter.Node
-	scope       *Scope
-	source      []byte
-	scopeOfNode ScopeOfNode
+	module *Module
+}
+
+func (py *Python) Module() *Module {
+	return py.module
 }
 
 func (p *Python) GetTreeSitterLanguage() *sitter.Language {
 	return treeSitterPy.GetLanguage()
 }
 
-func ParsePython(source string) (Language, error) {
+func ParsePython(source string) (*Python, error) {
 	sourceBytes := []byte(source)
 	ast, err := sitter.ParseCtx(context.TODO(), sourceBytes, treeSitterPy.GetLanguage())
 	if err != nil {
 		return nil, err
 	}
 
-	python := &Python{ast: ast, scope: nil, source: sourceBytes}
+	python := &Python{module: &Module{Ast: ast, GlobalScope: nil, Source: sourceBytes}}
 
 	scope, scopeMap := makeLexicalScopeTree(python, ast)
-	python.scope = scope
-	python.scopeOfNode = scopeMap
+	python.module.GlobalScope = scope
+	python.module.ScopeOfNode = scopeMap
 
 	return python, nil
 }
@@ -47,7 +48,7 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 			}
 
 			if lhs.Type() == "identifier" {
-				return []Decl{{lhs.Content(py.source), rhs}}
+				return []Decl{{lhs.Content(py.module.Source), rhs}}
 			} else if lhs.Type() == "pattern_list" && rhs.Type() == "expression_list" {
 				decls := []Decl{}
 
@@ -57,7 +58,7 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 				for i := 0; i < min(nLeftChildren, nRightChildren); i++ {
 					if lhs.NamedChild(i).Type() == "identifier" {
 						decls = append(decls, Decl{
-							lhs.NamedChild(i).Content(py.source),
+							lhs.NamedChild(i).Content(py.module.Source),
 							rhs.NamedChild(i),
 						})
 					}
@@ -75,15 +76,11 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 		{
 			funcName := node.ChildByFieldName("name")
 			if funcName != nil {
-				return []Decl{{funcName.Content(py.source), node}}
+				return []Decl{{funcName.Content(py.module.Source), node}}
 			}
 			// TODO@(Srijan/Tushar) bind function parameters
 		}
 	}
 
 	return nil
-}
-
-func (p *Python) GetScopeTree() (*Scope, ScopeOfNode) {
-	return p.scope, p.scopeOfNode
 }

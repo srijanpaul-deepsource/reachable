@@ -47,8 +47,7 @@ a, b: Tuple[int, int] = 1, 2
 		panic(err)
 	}
 
-	scope, _ := py.GetScopeTree()
-	graph := scope.ToDotGraph()
+	graph := py.Module().GlobalScope.ToDotGraph()
 
 	fmt.Println(graph.String())
 }

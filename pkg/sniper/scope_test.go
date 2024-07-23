@@ -26,7 +26,7 @@ func Test_(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, py)
 
-	scope, scopeOfNode := py.GetScopeTree()
+	scope, scopeOfNode := py.module.GlobalScope, py.module.ScopeOfNode
 	require.NotNil(t, scope)
 	require.NotNil(t, scopeOfNode)
 
