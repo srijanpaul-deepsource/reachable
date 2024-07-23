@@ -11,6 +11,7 @@ const pySource = `
 x = 'x'
 def foo():
 		def bar():
+			baz = 420
 			return 1	
 		return bar()	
 		
@@ -50,8 +51,14 @@ func Test_(t *testing.T) {
 
 	assert.NotContains(t, child.Symbols, "bar")
 
-	/* 	require.Len(t, child.Children, 1)
-	   	child = child.Children[0]
-	   	require.NotNil(t, child) */
+	require.Len(t, child.Children, 1)
+	child = child.Children[0]
+	require.NotNil(t, child)
+	require.Contains(t, child.Symbols, "bar")
 
+	require.Len(t, child.Children, 1)
+	child = child.Children[0]
+	require.NotNil(t, child)
+	require.Contains(t, child.Symbols, "baz")
+	assert.Equal(t, "420", child.Symbols["baz"].Content(pyBytes))
 }

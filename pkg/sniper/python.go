@@ -77,6 +77,7 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 			if funcName != nil {
 				return []Decl{{funcName.Content(py.source), node}}
 			}
+			// TODO@(Srijan/Tushar) bind function parameters
 		}
 	}
 
