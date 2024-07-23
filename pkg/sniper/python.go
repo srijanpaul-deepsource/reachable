@@ -39,11 +39,11 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 	switch node.Type() {
 	case "assignment":
 		{
-			lhs := node.NamedChild(0)
-			rhs := node.NamedChild(1)
+			lhs := node.ChildByFieldName("left")
+			rhs := node.ChildByFieldName("right")
 
-			if rhs.Type() == "type" {
-				rhs = node.NamedChild(2)
+			if lhs == nil || rhs == nil {
+				return nil
 			}
 
 			if lhs.Type() == "identifier" {
@@ -73,7 +73,7 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 
 	case "function_definition":
 		{
-			funcName := ChildOfType(node, "identifier")
+			funcName := node.ChildByFieldName("name")
 			if funcName != nil {
 				return []Decl{{funcName.Content(py.source), node}}
 			}

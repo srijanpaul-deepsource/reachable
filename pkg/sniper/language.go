@@ -161,13 +161,3 @@ func GetScope(l Language, node *sitter.Node) *Scope {
 
 	return nearestScope
 }
-
-func ChildOfType(node *sitter.Node, typeName string) *sitter.Node {
-	for i := 0; i < int(node.NamedChildCount()); i++ {
-		child := node.NamedChild(i)
-		if child.Type() == typeName {
-			return child
-		}
-	}
-	return nil
-}
