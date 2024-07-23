@@ -29,7 +29,7 @@ type Scope struct {
 	Parent           *Scope
 	Children         []*Scope
 	Symbols          map[string]*sitter.Node
-	ImportStatements map[string]*sitter.Node
+	FilePathOfImport map[*sitter.Node]string
 	AstNode          *sitter.Node
 }
 
@@ -87,7 +87,7 @@ func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode
 		Parent:           nil,
 		AstNode:          root,
 		Symbols:          make(map[string]*sitter.Node),
-		ImportStatements: make(map[string]*sitter.Node),
+		FilePathOfImport: make(map[*sitter.Node]string),
 	}
 	scopeOfNode := make(ScopeOfNode)
 	scopeOfNode[root] = globalScope
@@ -121,7 +121,7 @@ func makeLexicalScopeTree_(
 			AstNode:          node,
 			Parent:           scope,
 			Symbols:          make(map[string]*sitter.Node),
-			ImportStatements: make(map[string]*sitter.Node),
+			FilePathOfImport: make(map[*sitter.Node]string),
 		}
 		nextScope.Parent = scope
 		scopeOfNode[node] = nextScope
