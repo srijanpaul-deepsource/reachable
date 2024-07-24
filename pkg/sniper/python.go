@@ -3,6 +3,8 @@ package sniper
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	treeSitterPy "github.com/smacker/go-tree-sitter/python"
@@ -16,12 +18,40 @@ func (py *Python) Module() *Module {
 	return py.module
 }
 
+// findProjectRoot tries to find the root project for any python file.
+// It keeps traversing up the directory tree until it sees a "setup.py" or some
+// other config file.
+func findProjectRoot(filePath string) (*string, error) {
+	// TODO(@Tushar/Srijan): Cache the filepaths for every directory we encounter
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	for dir := filepath.Dir(absPath); dir != "/"; dir = filepath.Dir(dir) {
+		filesInRoot := []string{"setup.py", "setup.cfg", "pyproject.toml"}
+
+		for _, file := range filesInRoot {
+			fullPath := filepath.Join(dir, file)
+			_, err := os.Stat(fullPath)
+			if err == nil { // file exists
+				return &dir, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("could not find a parent directory with setup.py")
+}
+
 func ParsePython(fileName string, source string) (*Python, error) {
 	sourceBytes := []byte(source)
+	projectRoot, _ := findProjectRoot(fileName)
+
 	python := &Python{module: &Module{
-		FileName:   fileName,
-		Source:     sourceBytes,
-		TsLanguage: treeSitterPy.GetLanguage(),
+		FileName:    fileName,
+		Source:      sourceBytes,
+		ProjectRoot: projectRoot,
+		TsLanguage:  treeSitterPy.GetLanguage(),
 	}}
 
 	ast, err := sitter.ParseCtx(

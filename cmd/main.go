@@ -56,11 +56,9 @@ func main() {
 	test()
 	os.Exit(0)
 
-	// Define flags
 	repoRoot := flag.String("repo-root", "", "Root directory of the repository")
 	language := flag.String("language", "", "Programming language to be used")
 
-	// Parse the flags
 	flag.Parse()
 
 	// Get positional arguments (the files)

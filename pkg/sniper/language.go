@@ -4,7 +4,10 @@ import sitter "github.com/smacker/go-tree-sitter"
 
 // Module represents a single parsed file of any language.
 type Module struct {
-	Ast              *sitter.Node
+	Ast *sitter.Node
+	// ProjectRoot is the root directory of the project to which
+	// this module belongs
+	ProjectRoot      *string
 	FileName         string
 	Source           []byte
 	GlobalScope      *Scope
