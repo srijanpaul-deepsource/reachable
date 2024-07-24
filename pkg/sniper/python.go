@@ -124,5 +124,10 @@ func (py *Python) NameOfFunction(node *sitter.Node) string {
 		return node.ChildByFieldName("name").Content(py.module.Source)
 	}
 
+	if node.Type() == "lambda" {
+		nearestScope := GetScope(py.Module(), node)
+		return nearestScope.NameOfNode[node]
+	}
+
 	return ""
 }

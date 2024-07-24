@@ -8,48 +8,77 @@ import (
 	"github.com/srijanpaul-deepsource/reachable/pkg/util"
 )
 
+// CgNode is a node in the call-graph
 type CgNode struct {
-	Func      *sitter.Node
+	// Func is the function declaration for this node
+	Func *sitter.Node
+	// Neighbors is a list of CgNodes for other functions that are called
+	// inside the body of `Func`
 	Neighbors []*CgNode
 }
 
+// CallGraph maps a function definition or call-expression AST node
+// to its corresponding call graph.
 type CallGraph struct {
 	language        Language
 	CallGraphOfNode map[*sitter.Node]*CgNode
 }
 
+// NewCallGraph creates an empty call graph
 func NewCallGraph(language Language) *CallGraph {
 	return &CallGraph{language: language, CallGraphOfNode: make(map[*sitter.Node]*CgNode)}
 }
 
+// FindCallGraph finds a call-graph corresponding to a call-expression node.
 func (cg *CallGraph) FindCallGraph(node *sitter.Node) *CgNode {
 	if !cg.language.IsCallExpr(node) {
+		// We do not resolve
 		return nil
 	}
 
+	// Check if a cached call-graph exists
 	cached, exists := cg.CallGraphOfNode[node]
 	if exists {
 		return cached
 	}
 
+	// If not, find the function that the call-expression
+	// is calling.
+	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
 	fn := cg.resolveCallExpr(node)
-	// fmt.Printf("%s\n", fn.Content(cg.language.Module().Source))
 	if fn == nil {
 		return nil
 	}
 
+	// Traverse the body of that function, and create the call-graph.
 	cgNode := cg.traverseFunction(fn)
 	cg.CallGraphOfNode[node] = cgNode
 	return cgNode
 }
 
-type AstWalker struct {
+// CgAstWalker is an AST walker for walking function bodies
+// and building the call graph nodes for every call-expr
+// in there.
+type CgAstWalker struct {
 	language      Language
 	currentCgNode *CgNode
 	cg            *CallGraph
 }
 
-func (walker *AstWalker) OnEnterNode(node *sitter.Node) bool {
+// OnEnterNode is needed by `Walker` interface
+func (walker *CgAstWalker) OnEnterNode(node *sitter.Node) bool {
+	// Do not enter nested functions.
+	// Eg:
+	// function f() {
+	//  var g = function () {
+	//     h()
+	//  }
+	//  return g
+	// }
+	// The call graph for the above should be:
+	// f -> <end>
+	// And not:
+	// f -> h
 	if walker.language.IsFunctionDef(node) {
 		return false
 	}
@@ -60,6 +89,7 @@ func (walker *AstWalker) OnEnterNode(node *sitter.Node) bool {
 			return true
 		}
 
+		// Todo: use FindCallGraph here.
 		cgNode := walker.cg.traverseFunction(fun)
 		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, cgNode)
 		walker.cg.CallGraphOfNode[node] = cgNode
@@ -68,10 +98,13 @@ func (walker *AstWalker) OnEnterNode(node *sitter.Node) bool {
 	return true
 }
 
-func (walker *AstWalker) OnLeaveNode(node *sitter.Node) {
+// OnLeaveNode is needed by `Walker` interface
+func (walker *CgAstWalker) OnLeaveNode(node *sitter.Node) {
 	// empty
 }
 
+// traverseFunction traverses the body of `fn` (a function def node)
+// and builds a CgNode where the root node is `fn`
 func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 	cached := cg.CallGraphOfNode[fn]
 	if cached != nil {
@@ -81,12 +114,7 @@ func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 	cgNode := &CgNode{Func: fn, Neighbors: nil}
 	cg.CallGraphOfNode[fn] = cgNode
 
-	/* 	src := cg.language.Module().Source
-	   	if string(src) == "" {
-	   		// ???
-	   	}
-	*/
-	walker := AstWalker{
+	walker := CgAstWalker{
 		language:      cg.language,
 		currentCgNode: cgNode,
 		cg:            cg,
@@ -115,6 +143,7 @@ func (cg *CallGraph) resolveCallExpr(callExpr *sitter.Node) *sitter.Node {
 	return decl
 }
 
+// ToDotGraph converts a CallGraph to a dot graph for debugging/visualization
 func (cgNode *CgNode) ToDotGraph(cg *CallGraph) *dot.Graph {
 	visited := make(map[*CgNode]dot.Node)
 	g := dot.NewGraph()
@@ -122,6 +151,7 @@ func (cgNode *CgNode) ToDotGraph(cg *CallGraph) *dot.Graph {
 	return g
 }
 
+// toDotNode converts a CgNode to a dot graph node.
 func (cgNode *CgNode) toDotNode(cg *CallGraph,
 	g *dot.Graph,
 	visited map[*CgNode]dot.Node,

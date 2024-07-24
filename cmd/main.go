@@ -30,6 +30,11 @@ func test() {
 	code := `
 def f():
 	g()
+	x = f()
+	def bar():
+		return g()
+	f2 = lambda x : x
+	return f2()
 
 def g():
 	f()`

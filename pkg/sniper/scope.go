@@ -18,27 +18,48 @@ var blockNodeTypes = []string{
 	"function_declaration",
 }
 
+// ScopeOfNode maps a tree-sitter node (like
+// function def or block node) to the scope
+// that the node introduces into the program.
 type ScopeOfNode map[*sitter.Node]*Scope
 
+// Decl is any function or variable declaration
+// found in the AST.
 type Decl struct {
-	Name     string
+	// Name is the symbol of the declaration
+	Name string
+	// InitExpr is the expression node that a symbol
+	// initialized to.
 	InitExpr *sitter.Node
 }
 
+// Scope represents a single block or function
+// scope in the AST.
 type Scope struct {
-	Parent           *Scope
-	Children         []*Scope
-	Symbols          map[string]*sitter.Node
+	// Parent is the immediately upper scope
+	Parent *Scope
+	// Children is a list of sub-scopes
+	Children []*Scope
+	// Symbols maps a name to an AST node that
+	// the name was initialized to
+	Symbols map[string]*sitter.Node
+	// Name is the inverse-map of `Symbols`.
+	NameOfNode map[*sitter.Node]string
+	// (TODO)
 	FilePathOfImport map[*sitter.Node]string
-	AstNode          *sitter.Node
+	// AstNode is the node that introduced this scope
+	// in the program
+	AstNode *sitter.Node
 }
 
+// ToDotGraph generates a dot graph from the Scope
 func (s *Scope) ToDotGraph() *dot.Graph {
 	g := dot.NewGraph()
 	s.toDotNode(g)
 	return g
 }
 
+// toDotNode creates a dot-graph node from a scope node
 func (s *Scope) toDotNode(g *dot.Graph) dot.Node {
 	current := g.Node(fmt.Sprintf("%p", &s))
 
@@ -82,6 +103,7 @@ func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode
 		AstNode:          root,
 		Symbols:          make(map[string]*sitter.Node),
 		FilePathOfImport: make(map[*sitter.Node]string),
+		NameOfNode:       make(map[*sitter.Node]string),
 	}
 	scopeOfNode := make(ScopeOfNode)
 	scopeOfNode[root] = globalScope
@@ -90,6 +112,15 @@ func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode
 	return globalScope, scopeOfNode
 }
 
+// makeLexicalScopeTree_ is the recursive helper
+// for makeLexicalScopeTree
+// It traverses the AST top-down,
+// for every node-type that is present in `blockNodeTypes`,
+// it :
+//  1. Creates a new scope
+//  2. Traverses the body of that block, and adds
+//     all declarations in that block to the scope
+//  3. For any sub-blocks, goes back to #1.
 func makeLexicalScopeTree_(
 	lang Language,
 	node *sitter.Node,
@@ -106,6 +137,7 @@ func makeLexicalScopeTree_(
 			// add a new variable declaration to the scope
 			// if it doesn't exist already
 			scope.Symbols[name] = writeExpr
+			scope.NameOfNode[writeExpr] = name
 		}
 	}
 
@@ -116,6 +148,7 @@ func makeLexicalScopeTree_(
 			Parent:           scope,
 			Symbols:          make(map[string]*sitter.Node),
 			FilePathOfImport: make(map[*sitter.Node]string),
+			NameOfNode:       make(map[*sitter.Node]string),
 		}
 		nextScope.Parent = scope
 		scopeOfNode[node] = nextScope

@@ -2,6 +2,7 @@ package sniper
 
 import sitter "github.com/smacker/go-tree-sitter"
 
+// Module represents a single parsed file of any language.
 type Module struct {
 	Ast         *sitter.Node
 	Source      []byte
@@ -10,6 +11,8 @@ type Module struct {
 	TsLanguage  *sitter.Language
 }
 
+// Language is a wrapper around a single parsed module
+// of any supported language.
 type Language interface {
 	Module() *Module
 	GetDecls(*sitter.Node) []Decl
