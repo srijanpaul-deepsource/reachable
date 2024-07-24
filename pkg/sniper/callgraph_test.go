@@ -24,7 +24,7 @@ func removeWhitespace(s string) string {
 }
 
 func Test_CallGraph(t *testing.T) {
-	py, err := ParsePython(code)
+	py, err := ParsePython("test.py", code)
 	require.NoError(t, err)
 	require.NotNil(t, py)
 
@@ -33,9 +33,9 @@ func Test_CallGraph(t *testing.T) {
 	assert.Len(t, graph.EdgesMap(), 2)
 
 	want := removeWhitespace(`digraph {
-		n1[label="baz"];
-		n2[label="foo"];
-		n3[label="f"];
+		n1[label="test:baz"];
+		n2[label="test:foo"];
+		n3[label="test:f"];
 		n1->n2;
 		n2->n3;}`,
 	)
@@ -60,7 +60,7 @@ def g():
 	f()
 `
 
-	py, err := ParsePython(code)
+	py, err := ParsePython("test.py", code)
 	if err != nil {
 		panic(err)
 	}
@@ -72,10 +72,10 @@ def g():
 
 	want := removeWhitespace(`
 		digraph {
-			n1[label="f"];
-			n2[label="g"];
-			n3[label="bar"];
-			n4[label="f2"];
+			n1[label="test:f"];
+			n2[label="test:g"];
+			n3[label="test:bar"];
+			n4[label="test:f2"];
 			n1->n2;
 			n1->n1;
 			n1->n3;

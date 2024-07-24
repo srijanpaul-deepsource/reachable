@@ -22,7 +22,7 @@ a, b: Tuple[int, int] = 1, 2
 var pyBytes = []byte(pySource)
 
 func Test_Scope(t *testing.T) {
-	py, err := ParsePython(pySource)
+	py, err := ParsePython("test.py", pySource)
 	require.NoError(t, err)
 	require.NotNil(t, py)
 

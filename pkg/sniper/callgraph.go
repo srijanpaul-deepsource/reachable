@@ -2,6 +2,8 @@ package sniper
 
 import (
 	"fmt"
+	"path"
+	"strings"
 
 	"github.com/emicklei/dot"
 	sitter "github.com/smacker/go-tree-sitter"
@@ -155,13 +157,16 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 		return cached
 	}
 
+	fileName := cg.language.Module().FileName
+	fileName = strings.TrimSuffix(fileName, path.Ext(fileName))
+
 	current := g.Node(fmt.Sprintf("%p", &cgNode))
-	label := "(missing)"
+	label := fileName + ":(missing)"
 
 	if cgNode.Func != nil {
 		name := cg.language.NameOfFunction(cgNode.Func)
 		if name != "" {
-			label = name
+			label = fileName + ":" + name
 		}
 	}
 

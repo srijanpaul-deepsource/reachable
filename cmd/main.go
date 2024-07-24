@@ -39,7 +39,7 @@ def f():
 def g():
 	f()`
 
-	py, err := sniper.ParsePython(code)
+	py, err := sniper.ParsePython("main.py", code)
 	if err != nil {
 		panic(err)
 	}

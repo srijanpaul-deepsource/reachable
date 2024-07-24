@@ -16,10 +16,10 @@ func (py *Python) Module() *Module {
 	return py.module
 }
 
-func ParsePython(source string) (*Python, error) {
+func ParsePython(fileName string, source string) (*Python, error) {
 	sourceBytes := []byte(source)
 	python := &Python{module: &Module{
-		FileName:   "<filename>",
+		FileName:   fileName,
 		Source:     sourceBytes,
 		TsLanguage: treeSitterPy.GetLanguage(),
 	}}
@@ -138,5 +138,10 @@ func (py *Python) IsImport(node *sitter.Node) bool {
 }
 
 func (py *Python) FilePathOfImport(node *sitter.Node) string {
+	cached := py.module.FilePathOfImport[node]
+	if cached != "" {
+		return cached
+	}
+
 	return ""
 }
