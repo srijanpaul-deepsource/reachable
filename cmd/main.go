@@ -36,6 +36,9 @@ def foo():
 
 def baz():
 	return foo()
+
+
+baz()
 `
 
 	py, err := sniper.ParsePython(code)
@@ -43,27 +46,8 @@ def baz():
 		panic(err)
 	}
 
-	queryStr := `(call) @call`
-	q, _ := sitter.NewQuery([]byte(queryStr), py.Module().TsLanguage)
-	qc := sitter.NewQueryCursor()
-	qc.Exec(q, py.Module().Ast)
-
-	for {
-		match, ok := qc.NextMatch()
-		if !ok {
-			break
-		}
-
-		match = qc.FilterPredicates(match, py.Module().Source)
-		cg := sniper.NewCallGraph(py)
-		for _, c := range match.Captures {
-			node := c.Node
-			cgNode := cg.FindCallGraph(node)
-			graph := cgNode.ToDotGraph(cg)
-			fmt.Println(graph.String())
-		}
-
-	}
+	dg := sniper.DotGraphFromTsQuery(`(call function:(identifier) @id (.match? @id "baz")) @call`, py)
+	fmt.Println(dg.String())
 }
 
 func main() {

@@ -5,11 +5,12 @@ import (
 
 	"github.com/emicklei/dot"
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/srijanpaul-deepsource/reachable/pkg/util"
 )
 
 type CgNode struct {
-	Func     *sitter.Node
-	Children []*CgNode
+	Func      *sitter.Node
+	Neighbors []*CgNode
 }
 
 type CallGraph struct {
@@ -32,44 +33,66 @@ func (cg *CallGraph) FindCallGraph(node *sitter.Node) *CgNode {
 	}
 
 	fn := cg.resolveCallExpr(node)
+	// fmt.Printf("%s\n", fn.Content(cg.language.Module().Source))
 	if fn == nil {
 		return nil
 	}
 
-	cgNode := cg.traverseFunction(fn, 0)
+	cgNode := cg.traverseFunction(fn)
 	cg.CallGraphOfNode[node] = cgNode
 	return cgNode
 }
 
-func (cg *CallGraph) traverseFunction(fn *sitter.Node, funcDepth int) *CgNode {
+type AstWalker struct {
+	language      Language
+	currentCgNode *CgNode
+	cg            *CallGraph
+}
+
+func (walker *AstWalker) OnEnterNode(node *sitter.Node) bool {
+	if walker.language.IsFunctionDef(node) {
+		return false
+	}
+
+	if walker.language.IsCallExpr(node) {
+		fun := walker.cg.resolveCallExpr(node)
+		if fun == nil {
+			return true
+		}
+
+		child := walker.cg.traverseFunction(fun)
+		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, child)
+	}
+
+	return true
+}
+
+func (walker *AstWalker) OnLeaveNode(node *sitter.Node) {
+	// empty
+}
+
+func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 	cached := cg.CallGraphOfNode[fn]
 	if cached != nil {
 		return cached
 	}
 
-	cgNode := &CgNode{Func: fn, Children: nil}
+	cgNode := &CgNode{Func: fn, Neighbors: nil}
 	cg.CallGraphOfNode[fn] = cgNode
 
-	body := cg.language.BodyOfFunction(fn)
-
-	for stmt := body.Child(0); stmt != nil; stmt = stmt.NextSibling() {
-		if cg.language.IsFunctionDef(stmt) {
-			cg.traverseFunction(stmt, funcDepth+1)
-			continue
-		}
-
-		if cg.language.IsCallExpr(stmt) {
-			fun := cg.resolveCallExpr(stmt)
-			if fun == nil {
-				continue
-			}
-
-			child := &CgNode{Func: fun, Children: nil}
-			cg.traverseFunction(fun, 0)
-
-			cgNode.Children = append(cgNode.Children, child)
-		}
+	src := cg.language.Module().Source
+	if string(src) == "" {
+		// ???
 	}
+
+	walker := AstWalker{
+		language:      cg.language,
+		currentCgNode: cgNode,
+		cg:            cg,
+	}
+
+	body := cg.language.BodyOfFunction(fn)
+	util.WalkTree(body, &walker)
 
 	return cgNode
 }
@@ -110,7 +133,7 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph, g *dot.Graph) dot.Node {
 
 	current = current.Attr("label", label)
 
-	for _, child := range cgNode.Children {
+	for _, child := range cgNode.Neighbors {
 		child := child.toDotNode(cg, g)
 		g.Edge(current, child)
 	}

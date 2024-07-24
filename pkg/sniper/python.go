@@ -120,7 +120,7 @@ func (py *Python) BodyOfFunction(node *sitter.Node) *sitter.Node {
 }
 
 func (py *Python) NameOfFunction(node *sitter.Node) string {
-	if node.Type() != "function_definition" {
+	if node.Type() == "function_definition" {
 		return node.ChildByFieldName("name").Content(py.module.Source)
 	}
 
