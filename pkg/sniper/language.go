@@ -5,6 +5,7 @@ import sitter "github.com/smacker/go-tree-sitter"
 // Module represents a single parsed file of any language.
 type Module struct {
 	Ast         *sitter.Node
+	FileName    string
 	Source      []byte
 	GlobalScope *Scope
 	ScopeOfNode ScopeOfNode

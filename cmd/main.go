@@ -33,7 +33,7 @@ def f():
 	x = f()
 	def bar():
 		return g()
-	f2 = lambda x : x
+	f2 = lambda x : bar()
 	return f2()
 
 def g():

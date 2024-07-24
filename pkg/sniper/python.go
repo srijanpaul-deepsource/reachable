@@ -19,6 +19,7 @@ func (py *Python) Module() *Module {
 func ParsePython(source string) (*Python, error) {
 	sourceBytes := []byte(source)
 	python := &Python{module: &Module{
+		FileName:   "<filename>",
 		Source:     sourceBytes,
 		TsLanguage: treeSitterPy.GetLanguage(),
 	}}

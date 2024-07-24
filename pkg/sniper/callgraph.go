@@ -84,13 +84,7 @@ func (walker *CgAstWalker) OnEnterNode(node *sitter.Node) bool {
 	}
 
 	if walker.language.IsCallExpr(node) {
-		fun := walker.cg.resolveCallExpr(node)
-		if fun == nil {
-			return true
-		}
-
-		// Todo: use FindCallGraph here.
-		cgNode := walker.cg.traverseFunction(fun)
+		cgNode := walker.cg.FindCallGraph(node)
 		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, cgNode)
 		walker.cg.CallGraphOfNode[node] = cgNode
 	}
@@ -171,7 +165,7 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 		}
 	}
 
-	current = current.Attr("label", label)
+	current = current.Label(label)
 	visited[cgNode] = current
 
 	for _, child := range cgNode.Neighbors {
