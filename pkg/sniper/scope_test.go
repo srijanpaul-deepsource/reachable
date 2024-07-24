@@ -21,7 +21,7 @@ a, b: Tuple[int, int] = 1, 2
 
 var pyBytes = []byte(pySource)
 
-func Test_(t *testing.T) {
+func Test_Scope(t *testing.T) {
 	py, err := ParsePython(pySource)
 	require.NoError(t, err)
 	require.NotNil(t, py)

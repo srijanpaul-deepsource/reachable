@@ -29,24 +29,21 @@ type Config struct {
 func test() {
 	code := `
 def f():
-	return
+	g()
 
-def foo():
-	f()
-
-def baz():
-	return foo()
-
-
-baz()
-`
+def g():
+	f()`
 
 	py, err := sniper.ParsePython(code)
 	if err != nil {
 		panic(err)
 	}
 
-	dg := sniper.DotGraphFromTsQuery(`(call function:(identifier) @id (.match? @id "baz")) @call`, py)
+	dg := sniper.DotGraphFromTsQuery(
+		`(call function:(identifier) @id (.match? @id "f")) @call`,
+		py,
+	)
+
 	fmt.Println(dg.String())
 }
 

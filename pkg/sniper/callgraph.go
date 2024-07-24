@@ -60,8 +60,9 @@ func (walker *AstWalker) OnEnterNode(node *sitter.Node) bool {
 			return true
 		}
 
-		child := walker.cg.traverseFunction(fun)
-		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, child)
+		cgNode := walker.cg.traverseFunction(fun)
+		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, cgNode)
+		walker.cg.CallGraphOfNode[node] = cgNode
 	}
 
 	return true
@@ -80,11 +81,11 @@ func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 	cgNode := &CgNode{Func: fn, Neighbors: nil}
 	cg.CallGraphOfNode[fn] = cgNode
 
-	src := cg.language.Module().Source
-	if string(src) == "" {
-		// ???
-	}
-
+	/* 	src := cg.language.Module().Source
+	   	if string(src) == "" {
+	   		// ???
+	   	}
+	*/
 	walker := AstWalker{
 		language:      cg.language,
 		currentCgNode: cgNode,
@@ -115,12 +116,21 @@ func (cg *CallGraph) resolveCallExpr(callExpr *sitter.Node) *sitter.Node {
 }
 
 func (cgNode *CgNode) ToDotGraph(cg *CallGraph) *dot.Graph {
+	visited := make(map[*CgNode]dot.Node)
 	g := dot.NewGraph()
-	cgNode.toDotNode(cg, g)
+	cgNode.toDotNode(cg, g, visited)
 	return g
 }
 
-func (cgNode *CgNode) toDotNode(cg *CallGraph, g *dot.Graph) dot.Node {
+func (cgNode *CgNode) toDotNode(cg *CallGraph,
+	g *dot.Graph,
+	visited map[*CgNode]dot.Node,
+) dot.Node {
+
+	if cached, exists := visited[cgNode]; exists {
+		return cached
+	}
+
 	current := g.Node(fmt.Sprintf("%p", &cgNode))
 	label := "(missing)"
 
@@ -132,9 +142,10 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph, g *dot.Graph) dot.Node {
 	}
 
 	current = current.Attr("label", label)
+	visited[cgNode] = current
 
 	for _, child := range cgNode.Neighbors {
-		child := child.toDotNode(cg, g)
+		child := child.toDotNode(cg, g, visited)
 		g.Edge(current, child)
 	}
 
