@@ -132,3 +132,11 @@ func (py *Python) NameOfFunction(node *sitter.Node) string {
 
 	return ""
 }
+
+func (py *Python) IsImport(node *sitter.Node) bool {
+	return false
+}
+
+func (py *Python) FilePathOfImport(node *sitter.Node) string {
+	return ""
+}
