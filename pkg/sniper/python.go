@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	treeSitterPy "github.com/smacker/go-tree-sitter/python"
@@ -166,14 +167,60 @@ func (py *Python) NameOfFunction(node *sitter.Node) *string {
 }
 
 func (py *Python) IsImport(node *sitter.Node) bool {
-	return false
+	return node.Type() == "import_from_statement" || node.Type() == "import_statement"
 }
 
-func (py *Python) FilePathOfImport(node *sitter.Node) string {
+func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 	cached := py.module.FilePathOfImport[node]
 	if cached != "" {
-		return cached
+		return &cached
 	}
 
-	return ""
+	// TODO(@Tushar/Srijan): `import *` is not handled
+	var moduleName string
+	var itemName string
+	if node.Type() == "import_from_statement" {
+		moduleName = node.ChildByFieldName("module_name").Content(py.module.Source)
+		upLevel := 0
+
+		for strings.HasPrefix(moduleName, ".") {
+			moduleName = moduleName[1:]
+			upLevel++
+		}
+
+		// TODO: there's no `children_by_field_name` equivalent in go
+		itemName = node.ChildByFieldName("name").Content(py.module.Source)
+
+	} else if node.Type() == "import_statement" {
+		// TODO
+		return nil
+	}
+
+	// println("moduleName:", moduleName)
+	baseModulePath := filepath.Join(strings.Split(moduleName, ".")...)
+
+	modulePaths := []string{
+		filepath.Join(baseModulePath, itemName),
+		baseModulePath,
+	}
+
+	relPaths := []string{".", "src"}
+	for _, relPath := range relPaths {
+		for _, modulePath := range modulePaths {
+			possibleFileA := filepath.Join(*py.Module().ProjectRoot, relPath, modulePath, "__init__.py")
+			possibleFileB := filepath.Join(*py.Module().ProjectRoot, relPath, modulePath+".py")
+
+			if _, err := os.Stat(possibleFileA); err == nil {
+				py.module.FilePathOfImport[node] = possibleFileA
+				return &possibleFileA
+			}
+
+			if _, err := os.Stat(possibleFileB); err == nil {
+				py.module.FilePathOfImport[node] = possibleFileB
+				return &possibleFileB
+			}
+		}
+	}
+
+	return nil
 }

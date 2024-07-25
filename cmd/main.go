@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/srijanpaul-deepsource/reachable/pkg/sniper"
@@ -28,28 +29,34 @@ type Config struct {
 
 func test() {
 	code := `
+from foo.bar import baz
 
-def main():
-	print("hello world")
+def f():
+ g()
+ x = f()
+ def bar():
+  return g()
+ f2 = lambda x : bar()
+ return f2()
 
-main()
-`
+def g():
+ f()`
 
 	py, err := sniper.ParsePython("main.py", code)
 	if err != nil {
 		panic(err)
 	}
-
-	dg := sniper.DotGraphFromTsQuery(
-		`(call function:(identifier) @id (.match? @id "main")) @call`,
-		py,
-	)
-
-	if dg == nil {
-		panic("dotgraph is nil")
+	pyProjectRoot, err := filepath.Abs("./test-projects/pyproject")
+	if err != nil {
+		panic(err)
 	}
+	py.Module().ProjectRoot = &pyProjectRoot
 
-	fmt.Println(dg.String())
+	node := py.Module().Ast.Child(0)
+	// println(node.Content(py.Module().Source))
+	println(py.FilePathOfImport(node))
+
+	os.Exit(0)
 }
 
 func main() {
