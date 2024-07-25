@@ -9,6 +9,7 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 	treeSitterPy "github.com/smacker/go-tree-sitter/python"
+	"github.com/srijanpaul-deepsource/reachable/pkg/util"
 )
 
 type Python struct {
@@ -44,19 +45,20 @@ func findProjectRoot(filePath string) (*string, error) {
 	return nil, fmt.Errorf("could not find a parent directory with setup.py")
 }
 
-func ParsePython(fileName string, source string) (*Python, error) {
-	sourceBytes := []byte(source)
+func ParsePython(fileName string, source []byte) (*Python, error) {
 	projectRoot, _ := findProjectRoot(fileName)
 
 	python := &Python{module: &Module{
-		FileName:    fileName,
-		Source:      sourceBytes,
-		ProjectRoot: projectRoot,
-		TsLanguage:  treeSitterPy.GetLanguage(),
+		FileName:         fileName,
+		Source:           source,
+		Language:         LangPy,
+		ProjectRoot:      projectRoot,
+		TsLanguage:       treeSitterPy.GetLanguage(),
+		FilePathOfImport: make(map[*sitter.Node]string),
 	}}
 
 	ast, err := sitter.ParseCtx(
-		context.Background(), sourceBytes, python.module.TsLanguage,
+		context.Background(), source, python.module.TsLanguage,
 	)
 
 	if err != nil {
@@ -114,6 +116,32 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 				return []Decl{{funcName.Content(py.module.Source), node}}
 			}
 			// TODO@(Srijan/Tushar) bind function parameters
+		}
+
+	case "import_from_statement":
+		{
+			importedSymbols := util.ChildrenWithFieldName(node, "name")
+			var decls []Decl
+			for _, nameNode := range importedSymbols {
+				switch nameNode.Type() {
+				case "dotted_name":
+					{
+						firstChild := nameNode.Child(0)
+						if firstChild.Type() == "identifier" {
+							name := firstChild.Content(py.module.Source)
+							decls = append(decls, Decl{name, node})
+						}
+					}
+				case "aliased_import":
+					{
+						panic("not implemented")
+					}
+				default:
+					panic("Imported symbol is a " + nameNode.Type())
+				}
+			}
+
+			return decls
 		}
 	}
 
@@ -223,4 +251,14 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 	}
 
 	return nil
+}
+
+func (py *Python) ResolveExportedSymbol(name string) *sitter.Node {
+	globalScope := py.Module().GlobalScope
+	if len(globalScope.Children) == 0 {
+		panic("Malformed global scope with no child scopes")
+	}
+
+	moduleScope := globalScope.Children[0]
+	return moduleScope.Symbols[name]
 }

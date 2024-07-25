@@ -1,3 +1,7 @@
+def iszero(x):
+    return x == 0
+
+
 def assert_nonzero(x):
-    if x == 0:
+    if iszero(x):
         raise Exception("Division by zero")

@@ -3,12 +3,45 @@ package sniper
 import (
 	"github.com/emicklei/dot"
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/srijanpaul-deepsource/reachable/pkg/util"
 )
 
-func DotGraphFromTsQuery(queryStr string, lang Language) *dot.Graph {
-	q, _ := sitter.NewQuery([]byte(queryStr), lang.Module().TsLanguage)
+type CallExprWalker struct {
+	callGraph *CallGraph
+	file      ParsedFile
+}
+
+func (c *CallExprWalker) OnEnterNode(node *sitter.Node) bool {
+	if node.Type() == "call" {
+		c.callGraph.FindCallGraph(c.file, node)
+	}
+
+	return true
+}
+
+func (c *CallExprWalker) OnLeaveNode(node *sitter.Node) {
+	// empty because we aren't interested in the exit event
+}
+
+func DotGraphFromFile(file ParsedFile, moduleCache map[string]ParsedFile) *dot.Graph {
+	cg := NewCallGraph()
+	cg.ModuleCache = moduleCache
+	cgWalker := &CallExprWalker{callGraph: cg, file: file}
+	util.WalkTree(file.Module().Ast, cgWalker)
+
+	graph := dot.NewGraph()
+	visited := make(map[*CgNode]dot.Node)
+	for _, cgNode := range cgWalker.callGraph.CallGraphOfNode {
+		cgNode.ToDotNode(cg, graph, visited)
+	}
+
+	return graph
+}
+
+func DotGraphFromTsQuery(queryStr string, file ParsedFile) *dot.Graph {
+	q, _ := sitter.NewQuery([]byte(queryStr), file.Module().TsLanguage)
 	qc := sitter.NewQueryCursor()
-	qc.Exec(q, lang.Module().Ast)
+	qc.Exec(q, file.Module().Ast)
 
 	for {
 		match, ok := qc.NextMatch()
@@ -16,15 +49,15 @@ func DotGraphFromTsQuery(queryStr string, lang Language) *dot.Graph {
 			break
 		}
 
-		match = qc.FilterPredicates(match, lang.Module().Source)
-		cg := NewCallGraph(lang)
+		match = qc.FilterPredicates(match, file.Module().Source)
+		cg := NewCallGraph()
 		if cg == nil {
 			return nil
 		}
 
 		for _, c := range match.Captures {
 			node := c.Node
-			cgNode := cg.FindCallGraph(node)
+			cgNode := cg.FindCallGraph(file, node)
 			if cgNode == nil {
 				return nil
 			}

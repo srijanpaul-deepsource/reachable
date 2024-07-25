@@ -22,3 +22,18 @@ func WalkTree(node *sitter.Node, walker Walker) {
 
 	walker.OnLeaveNode(node)
 }
+
+// ChildrenWithFieldName returns all the children of a node
+// with a specific field name.
+// Tree-sitter can have multiple children with the same field name.
+func ChildrenWithFieldName(node *sitter.Node, fieldName string) []*sitter.Node {
+	children := []*sitter.Node{}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if node.FieldNameForChild(i) == fieldName {
+			child := node.Child(i)
+			children = append(children, child)
+		}
+	}
+
+	return children
+}

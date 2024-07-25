@@ -3,6 +3,7 @@ from mypackage.util import assert_nonzero
 
 def div(a, b):
     assert_nonzero(b)
+    assert_nonzero(b)
     return a / b
 
 

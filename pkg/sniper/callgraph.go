@@ -20,31 +20,33 @@ type CgNode struct {
 	// Neighbors is a list of CgNodes for other functions that are called
 	// inside the body of `Func`
 	Neighbors []*CgNode
+	// The file that this call-graph node belongs to
+	File ParsedFile
 }
 
-func NewCgNode(language Language, fn *sitter.Node) *CgNode {
+func NewCgNode(file ParsedFile, fn *sitter.Node) *CgNode {
 	var funcName *string
 	if fn != nil {
-		funcName = language.NameOfFunction(fn)
+		funcName = file.NameOfFunction(fn)
 	}
-	return &CgNode{Func: fn, FuncName: funcName}
+	return &CgNode{Func: fn, FuncName: funcName, File: file}
 }
 
 // CallGraph maps a function definition or call-expression AST node
 // to its corresponding call graph.
 type CallGraph struct {
-	language        Language
 	CallGraphOfNode map[*sitter.Node]*CgNode
+	ModuleCache     map[string]ParsedFile
 }
 
 // NewCallGraph creates an empty call graph
-func NewCallGraph(language Language) *CallGraph {
-	return &CallGraph{language: language, CallGraphOfNode: make(map[*sitter.Node]*CgNode)}
+func NewCallGraph() *CallGraph {
+	return &CallGraph{CallGraphOfNode: make(map[*sitter.Node]*CgNode)}
 }
 
 // FindCallGraph finds a call-graph corresponding to a call-expression node.
-func (cg *CallGraph) FindCallGraph(node *sitter.Node) *CgNode {
-	if !cg.language.IsCallExpr(node) {
+func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
+	if !file.IsCallExpr(node) {
 		// We do not resolve
 		return nil
 	}
@@ -55,31 +57,84 @@ func (cg *CallGraph) FindCallGraph(node *sitter.Node) *CgNode {
 		return cached
 	}
 
-	// If not, find the function that the call-expression
-	// is calling.
+	// If not, find the function that the call-expression is calling.
 	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
-	fn := cg.resolveCallExpr(node)
+	fn := cg.resolveCallExpr(file, node)
 	if fn == nil {
-		return &CgNode{FuncName: cg.language.GetCalleeName(node)}
+		// TODO: for builtins like `int()` and `input()`, it currently creates
+		// duplicate CGNodes. Fix this.
+		cgNode := &CgNode{FuncName: file.GetCalleeName(node), File: file}
+		cg.CallGraphOfNode[node] = cgNode
+		return cgNode
+	}
+
+	if file.IsImport(fn) {
+		// 1. Resolve the import to a file path
+		// 2. Parse the file into a Language.Module struct
+		// 3. Find the function definition in the module that the import resolves to
+		// 4. Create a call graph for that node.
+
+		// Resolve the import to a file.
+		filePath := file.FilePathOfImport(fn)
+		if filePath == nil {
+			return nil
+		}
+
+		// Check if the module is already importedFile
+		importedFile, exists := cg.ModuleCache[*filePath]
+		if !exists {
+			var err error
+			importedFile, err = ParseFile(file.Module().Language, *filePath)
+			if err != nil {
+				// TODO: return error when file parse fails.
+				return nil
+			}
+			cg.ModuleCache[*filePath] = importedFile
+		}
+
+		// Find the function definition in the module
+		nameOfCallee := file.GetCalleeName(node)
+		if nameOfCallee == nil {
+			return nil
+		}
+
+		def := importedFile.ResolveExportedSymbol(*nameOfCallee)
+		if def == nil {
+			return nil
+		}
+
+		if importedFile.IsImport(def) {
+			// TODO(@Tushar/Srijan): handle re-exports
+			return nil
+		}
+
+		if importedFile.IsFunctionDef(def) {
+			cgNode := cg.traverseFunction(importedFile, def)
+			cg.CallGraphOfNode[node] = cgNode
+			return cgNode
+		} else {
+			// TODO: what cases did we not handle?
+			return nil
+		}
 	}
 
 	// Traverse the body of that function, and create the call-graph.
-	cgNode := cg.traverseFunction(fn)
+	cgNode := cg.traverseFunction(file, fn)
 	cg.CallGraphOfNode[node] = cgNode
 	return cgNode
 }
 
-// CgAstWalker is an AST walker for walking function bodies
+// callExprWalker is an AST walker for walking function bodies
 // and building the call graph nodes for every call-expr
 // in there.
-type CgAstWalker struct {
-	language      Language
+type callExprWalker struct {
+	file          ParsedFile
 	currentCgNode *CgNode
 	cg            *CallGraph
 }
 
 // OnEnterNode is needed by `Walker` interface
-func (walker *CgAstWalker) OnEnterNode(node *sitter.Node) bool {
+func (walker *callExprWalker) OnEnterNode(node *sitter.Node) bool {
 	// Do not enter nested functions.
 	// Eg:
 	// function f() {
@@ -92,12 +147,12 @@ func (walker *CgAstWalker) OnEnterNode(node *sitter.Node) bool {
 	// f -> <end>
 	// And not:
 	// f -> h
-	if walker.language.IsFunctionDef(node) {
+	if walker.file.IsFunctionDef(node) {
 		return false
 	}
 
-	if walker.language.IsCallExpr(node) {
-		cgNode := walker.cg.FindCallGraph(node)
+	if walker.file.IsCallExpr(node) {
+		cgNode := walker.cg.FindCallGraph(walker.file, node)
 		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, cgNode)
 		walker.cg.CallGraphOfNode[node] = cgNode
 	}
@@ -106,28 +161,28 @@ func (walker *CgAstWalker) OnEnterNode(node *sitter.Node) bool {
 }
 
 // OnLeaveNode is needed by `Walker` interface
-func (walker *CgAstWalker) OnLeaveNode(node *sitter.Node) {
+func (walker *callExprWalker) OnLeaveNode(node *sitter.Node) {
 	// empty
 }
 
 // traverseFunction traverses the body of `fn` (a function def node)
 // and builds a CgNode where the root node is `fn`
-func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
+func (cg *CallGraph) traverseFunction(file ParsedFile, fn *sitter.Node) *CgNode {
 	cached := cg.CallGraphOfNode[fn]
 	if cached != nil {
 		return cached
 	}
 
-	cgNode := NewCgNode(cg.language, fn)
+	cgNode := NewCgNode(file, fn)
 	cg.CallGraphOfNode[fn] = cgNode
 
-	walker := CgAstWalker{
-		language:      cg.language,
+	walker := callExprWalker{
+		file:          file,
 		currentCgNode: cgNode,
 		cg:            cg,
 	}
 
-	body := cg.language.BodyOfFunction(fn)
+	body := file.BodyOfFunction(fn)
 	util.WalkTree(body, &walker)
 
 	return cgNode
@@ -135,13 +190,13 @@ func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 
 // resolveCallExpr takes a call expression node, and
 // returns the function definition for the callee.
-func (cg *CallGraph) resolveCallExpr(callExpr *sitter.Node) *sitter.Node {
-	scope := GetScope(cg.language.Module(), callExpr)
+func (cg *CallGraph) resolveCallExpr(file ParsedFile, callExpr *sitter.Node) *sitter.Node {
+	scope := GetScope(file.Module(), callExpr)
 	if scope == nil {
 		return nil
 	}
 
-	name := cg.language.GetCalleeName(callExpr)
+	name := file.GetCalleeName(callExpr)
 	if name == nil {
 		return nil
 	}
@@ -154,12 +209,12 @@ func (cg *CallGraph) resolveCallExpr(callExpr *sitter.Node) *sitter.Node {
 func (cgNode *CgNode) ToDotGraph(cg *CallGraph) *dot.Graph {
 	visited := make(map[*CgNode]dot.Node)
 	g := dot.NewGraph()
-	cgNode.toDotNode(cg, g, visited)
+	cgNode.ToDotNode(cg, g, visited)
 	return g
 }
 
-// toDotNode converts a CgNode to a dot graph node.
-func (cgNode *CgNode) toDotNode(cg *CallGraph,
+// ToDotNode converts a CgNode to a dot graph node.
+func (cgNode *CgNode) ToDotNode(cg *CallGraph,
 	g *dot.Graph,
 	visited map[*CgNode]dot.Node,
 ) dot.Node {
@@ -167,7 +222,7 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 		return cached
 	}
 
-	fileName := cg.language.Module().FileName
+	fileName := cgNode.File.Module().FileName
 	fileName = strings.TrimSuffix(fileName, path.Ext(fileName))
 
 	current := g.Node(fmt.Sprintf("%p", &cgNode))
@@ -187,7 +242,7 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 	visited[cgNode] = current
 
 	for _, neighbor := range cgNode.Neighbors {
-		newNode := neighbor.toDotNode(cg, g, visited)
+		newNode := neighbor.ToDotNode(cg, g, visited)
 		g.Edge(current, newNode)
 	}
 

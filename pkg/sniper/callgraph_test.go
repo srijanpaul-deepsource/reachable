@@ -24,7 +24,7 @@ func removeWhitespace(s string) string {
 }
 
 func Test_CallGraph(t *testing.T) {
-	py, err := ParsePython("test.py", code)
+	py, err := ParsePython("test.py", []byte(code))
 	require.NoError(t, err)
 	require.NotNil(t, py)
 
@@ -60,7 +60,7 @@ def g():
 	f()
 `
 
-	py, err := ParsePython("test.py", code)
+	py, err := ParsePython("test.py", []byte(code))
 	if err != nil {
 		panic(err)
 	}

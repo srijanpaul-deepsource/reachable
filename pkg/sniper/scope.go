@@ -97,7 +97,7 @@ func (s *Scope) Lookup(name string) *sitter.Node {
 
 // makeLexicalScopeTree generates a scope tree from the AST, along with a mapping from
 // block nodes to scope objects
-func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode) {
+func makeLexicalScopeTree(lang ParsedFile, root *sitter.Node) (*Scope, ScopeOfNode) {
 	globalScope := &Scope{
 		Parent:           nil,
 		AstNode:          root,
@@ -122,7 +122,7 @@ func makeLexicalScopeTree(lang Language, root *sitter.Node) (*Scope, ScopeOfNode
 //     all declarations in that block to the scope
 //  3. For any sub-blocks, goes back to #1.
 func makeLexicalScopeTree_(
-	lang Language,
+	lang ParsedFile,
 	node *sitter.Node,
 	scope *Scope,
 	scopeOfNode ScopeOfNode,

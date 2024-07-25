@@ -1,6 +1,8 @@
 package sniper
 
-import sitter "github.com/smacker/go-tree-sitter"
+import (
+	sitter "github.com/smacker/go-tree-sitter"
+)
 
 // Module represents a single parsed file of any language.
 type Module struct {
@@ -14,11 +16,20 @@ type Module struct {
 	ScopeOfNode      ScopeOfNode
 	TsLanguage       *sitter.Language
 	FilePathOfImport map[*sitter.Node]string
+	Language         Language
 }
 
-// Language is a wrapper around a single parsed module
+type Language int
+
+const (
+	LangError Language = iota
+	LangPy
+	LangJs
+)
+
+// ParsedFile is a wrapper around a single parsed module
 // of any supported language.
-type Language interface {
+type ParsedFile interface {
 	// Module returns the language specific module
 	Module() *Module
 
@@ -40,5 +51,7 @@ type Language interface {
 	IsImport(*sitter.Node) bool
 	// FilePathOfImport resolves an import statement node to an absolute file path
 	// Will return an empty string when resolution fails
-	FilePathOfImport(*sitter.Node) string
+	FilePathOfImport(*sitter.Node) *string
+	// ResolveExportedSymbol resolves an exported symbol to its definition node
+	ResolveExportedSymbol(string) *sitter.Node
 }

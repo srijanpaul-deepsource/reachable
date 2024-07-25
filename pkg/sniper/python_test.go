@@ -17,15 +17,6 @@ func goProjectRoot() string {
 
 	return goProjectRoot
 }
-
-func readFile(absPath string) (string, error) {
-	bytes, err := os.ReadFile(absPath)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
 func Test_findProjectRoot(t *testing.T) {
 	goProjectRoot := goProjectRoot()
 	pyFilePath := filepath.Join(goProjectRoot, "test-projects/pyproject/src/mypackage/__main__.py")
@@ -43,7 +34,7 @@ func Test_FilePathForImport(t *testing.T) {
 	goProjectRoot := goProjectRoot()
 	mainDotPy := filepath.Join(goProjectRoot, "test-projects/pyproject/src/mypackage/__main__.py")
 
-	contents, err := readFile(mainDotPy)
+	contents, err := os.ReadFile(mainDotPy)
 	require.NoError(t, err)
 
 	py, err := ParsePython(mainDotPy, contents)
