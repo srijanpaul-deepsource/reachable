@@ -13,10 +13,21 @@ import (
 // CgNode is a node in the call-graph
 type CgNode struct {
 	// Func is the function declaration for this node
+	// This is nil for builtins like `print`.
 	Func *sitter.Node
+	// Name of the function being called
+	FuncName *string
 	// Neighbors is a list of CgNodes for other functions that are called
 	// inside the body of `Func`
 	Neighbors []*CgNode
+}
+
+func NewCgNode(language Language, fn *sitter.Node) *CgNode {
+	var funcName *string
+	if fn != nil {
+		funcName = language.NameOfFunction(fn)
+	}
+	return &CgNode{Func: fn, FuncName: funcName}
 }
 
 // CallGraph maps a function definition or call-expression AST node
@@ -49,7 +60,7 @@ func (cg *CallGraph) FindCallGraph(node *sitter.Node) *CgNode {
 	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
 	fn := cg.resolveCallExpr(node)
 	if fn == nil {
-		return nil
+		return &CgNode{FuncName: cg.language.GetCalleeName(node)}
 	}
 
 	// Traverse the body of that function, and create the call-graph.
@@ -107,7 +118,7 @@ func (cg *CallGraph) traverseFunction(fn *sitter.Node) *CgNode {
 		return cached
 	}
 
-	cgNode := &CgNode{Func: fn, Neighbors: nil}
+	cgNode := NewCgNode(cg.language, fn)
 	cg.CallGraphOfNode[fn] = cgNode
 
 	walker := CgAstWalker{
@@ -152,7 +163,6 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 	g *dot.Graph,
 	visited map[*CgNode]dot.Node,
 ) dot.Node {
-
 	if cached, exists := visited[cgNode]; exists {
 		return cached
 	}
@@ -161,21 +171,24 @@ func (cgNode *CgNode) toDotNode(cg *CallGraph,
 	fileName = strings.TrimSuffix(fileName, path.Ext(fileName))
 
 	current := g.Node(fmt.Sprintf("%p", &cgNode))
-	label := fileName + ":(missing)"
+	label := fileName + ":(unresolved)"
 
-	if cgNode.Func != nil {
-		name := cg.language.NameOfFunction(cgNode.Func)
-		if name != "" {
-			label = fileName + ":" + name
+	if cgNode.FuncName != nil {
+		if cgNode.Func == nil {
+			// If the function body could not be resolved,
+			// we do not know which module it comes from.
+			label = "(unresolved):" + *cgNode.FuncName
+		} else {
+			label = fileName + ":" + *cgNode.FuncName
 		}
 	}
 
 	current = current.Label(label)
 	visited[cgNode] = current
 
-	for _, child := range cgNode.Neighbors {
-		child := child.toDotNode(cg, g, visited)
-		g.Edge(current, child)
+	for _, neighbor := range cgNode.Neighbors {
+		newNode := neighbor.toDotNode(cg, g, visited)
+		g.Edge(current, newNode)
 	}
 
 	return current

@@ -28,16 +28,12 @@ type Config struct {
 
 func test() {
 	code := `
-def f():
-	g()
-	x = f()
-	def bar():
-		return g()
-	f2 = lambda x : bar()
-	return f2()
 
-def g():
-	f()`
+def main():
+	print("hello world")
+
+main()
+`
 
 	py, err := sniper.ParsePython("main.py", code)
 	if err != nil {
@@ -45,9 +41,13 @@ def g():
 	}
 
 	dg := sniper.DotGraphFromTsQuery(
-		`(call function:(identifier) @id (.match? @id "f")) @call`,
+		`(call function:(identifier) @id (.match? @id "main")) @call`,
 		py,
 	)
+
+	if dg == nil {
+		panic("dotgraph is nil")
+	}
 
 	fmt.Println(dg.String())
 }

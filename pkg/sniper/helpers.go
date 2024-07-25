@@ -18,9 +18,16 @@ func DotGraphFromTsQuery(queryStr string, lang Language) *dot.Graph {
 
 		match = qc.FilterPredicates(match, lang.Module().Source)
 		cg := NewCallGraph(lang)
+		if cg == nil {
+			return nil
+		}
+
 		for _, c := range match.Captures {
 			node := c.Node
 			cgNode := cg.FindCallGraph(node)
+			if cgNode == nil {
+				return nil
+			}
 			graph := cgNode.ToDotGraph(cg)
 			return graph
 		}

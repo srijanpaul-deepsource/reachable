@@ -35,7 +35,7 @@ type Language interface {
 	// BodyOfFunction returns the body (e.g list of stmts) of a function node.
 	BodyOfFunction(*sitter.Node) *sitter.Node
 	// NameOfFunction returns the name of a function definition or lambda function
-	NameOfFunction(*sitter.Node) string
+	NameOfFunction(*sitter.Node) *string
 	// IsImport returns `true` if the node is a import statement (or expression, in some languages)
 	IsImport(*sitter.Node) bool
 	// FilePathOfImport resolves an import statement node to an absolute file path

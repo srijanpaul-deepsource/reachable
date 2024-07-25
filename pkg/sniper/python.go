@@ -150,17 +150,19 @@ func (py *Python) BodyOfFunction(node *sitter.Node) *sitter.Node {
 	return node.ChildByFieldName("body")
 }
 
-func (py *Python) NameOfFunction(node *sitter.Node) string {
+func (py *Python) NameOfFunction(node *sitter.Node) *string {
 	if node.Type() == "function_definition" {
-		return node.ChildByFieldName("name").Content(py.module.Source)
+		name := node.ChildByFieldName("name").Content(py.module.Source)
+		return &name
 	}
 
 	if node.Type() == "lambda" {
 		nearestScope := GetScope(py.Module(), node)
-		return nearestScope.NameOfNode[node]
+		name := nearestScope.NameOfNode[node]
+		return &name
 	}
 
-	return ""
+	return nil
 }
 
 func (py *Python) IsImport(node *sitter.Node) bool {
