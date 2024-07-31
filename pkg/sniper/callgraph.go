@@ -36,12 +36,19 @@ func NewCgNode(file ParsedFile, fn *sitter.Node) *CgNode {
 // to its corresponding call graph.
 type CallGraph struct {
 	CallGraphOfNode map[*sitter.Node]*CgNode
-	ModuleCache     map[string]ParsedFile
+	// Stub Call-graph nodes (leaves) for unresolved functions.
+	// Usually, this is a builtin (like `print` in python).
+	// TODO: what about methods? `os.exec()`?
+	UnresolvedCgNodes map[string]*CgNode
+	ModuleCache       map[string]ParsedFile
 }
 
 // NewCallGraph creates an empty call graph
 func NewCallGraph() *CallGraph {
-	return &CallGraph{CallGraphOfNode: make(map[*sitter.Node]*CgNode)}
+	return &CallGraph{
+		CallGraphOfNode:   make(map[*sitter.Node]*CgNode),
+		UnresolvedCgNodes: make(map[string]*CgNode),
+	}
 }
 
 // FindCallGraph finds a call-graph corresponding to a call-expression node.
@@ -61,10 +68,19 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
 	fn := cg.resolveCallExpr(file, node)
 	if fn == nil {
-		// TODO: for builtins like `int()` and `input()`, it currently creates
-		// duplicate CGNodes. Fix this.
-		cgNode := &CgNode{FuncName: file.GetCalleeName(node), File: file}
-		cg.CallGraphOfNode[node] = cgNode
+		calleeName := file.GetCalleeName(node)
+
+		if calleeName != nil {
+			cgNode, exists := cg.UnresolvedCgNodes[*calleeName]
+			if exists {
+				return cgNode
+			}
+		}
+
+		cgNode := &CgNode{FuncName: calleeName, File: file}
+		if calleeName != nil {
+			cg.UnresolvedCgNodes[*calleeName] = cgNode
+		}
 		return cgNode
 	}
 

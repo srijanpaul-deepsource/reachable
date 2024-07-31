@@ -4,4 +4,5 @@ def iszero(x):
 
 def assert_nonzero(x):
     if iszero(x):
+        print("OH NO!")
         raise Exception("Division by zero")
