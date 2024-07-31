@@ -54,4 +54,8 @@ type ParsedFile interface {
 	FilePathOfImport(*sitter.Node) *string
 	// ResolveExportedSymbol resolves an exported symbol to its definition node
 	ResolveExportedSymbol(string) *sitter.Node
+
+	// Returns the name of the package that this file belongs to.
+	// Usually, this is the name of a dependency (e.g: `requests` in python)
+	PackageName() *string
 }

@@ -66,10 +66,9 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 
 	// If not, find the function that the call-expression is calling.
 	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
-	fn := cg.resolveCallExpr(file, node)
-	if fn == nil {
+	defNode := cg.resolveCallExpr(file, node)
+	if defNode == nil {
 		calleeName := file.GetCalleeName(node)
-
 		if calleeName != nil {
 			cgNode, exists := cg.UnresolvedCgNodes[*calleeName]
 			if exists {
@@ -84,58 +83,18 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 		return cgNode
 	}
 
-	if file.IsImport(fn) {
-		// 1. Resolve the import to a file path
-		// 2. Parse the file into a Language.Module struct
-		// 3. Find the function definition in the module that the import resolves to
-		// 4. Create a call graph for that node.
-
-		// Resolve the import to a file.
-		filePath := file.FilePathOfImport(fn)
-		if filePath == nil {
+	if file.IsImport(defNode) {
+		calleeName := file.GetCalleeName(node)
+		if calleeName == nil {
 			return nil
 		}
-
-		// Check if the module is already importedFile
-		importedFile, exists := cg.ModuleCache[*filePath]
-		if !exists {
-			var err error
-			importedFile, err = ParseFile(file.Module().Language, *filePath)
-			if err != nil {
-				// TODO: return error when file parse fails.
-				return nil
-			}
-			cg.ModuleCache[*filePath] = importedFile
-		}
-
-		// Find the function definition in the module
-		nameOfCallee := file.GetCalleeName(node)
-		if nameOfCallee == nil {
-			return nil
-		}
-
-		def := importedFile.ResolveExportedSymbol(*nameOfCallee)
-		if def == nil {
-			return nil
-		}
-
-		if importedFile.IsImport(def) {
-			// TODO(@Tushar/Srijan): handle re-exports
-			return nil
-		}
-
-		if importedFile.IsFunctionDef(def) {
-			cgNode := cg.traverseFunction(importedFile, def)
-			cg.CallGraphOfNode[node] = cgNode
-			return cgNode
-		} else {
-			// TODO: what cases did we not handle?
-			return nil
-		}
+		importedDef := cg.resolveImport(file, defNode, *calleeName)
+		cg.CallGraphOfNode[node] = importedDef
+		return importedDef
 	}
 
 	// Traverse the body of that function, and create the call-graph.
-	cgNode := cg.traverseFunction(file, fn)
+	cgNode := cg.traverseFunction(file, defNode)
 	cg.CallGraphOfNode[node] = cgNode
 	return cgNode
 }
@@ -169,6 +128,10 @@ func (walker *callExprWalker) OnEnterNode(node *sitter.Node) bool {
 
 	if walker.file.IsCallExpr(node) {
 		cgNode := walker.cg.FindCallGraph(walker.file, node)
+		if cgNode == nil {
+			return true
+		}
+
 		walker.currentCgNode.Neighbors = append(walker.currentCgNode.Neighbors, cgNode)
 		walker.cg.CallGraphOfNode[node] = cgNode
 	}
@@ -263,4 +226,76 @@ func (cgNode *CgNode) ToDotNode(cg *CallGraph,
 	}
 
 	return current
+}
+
+type WalkFn func(*CgNode)
+
+func (callGraph *CallGraph) Walk(visitFn WalkFn) {
+	visited := make(map[*CgNode]struct{})
+
+	for _, root := range callGraph.CallGraphOfNode {
+		if _, alreadyVisited := visited[root]; !alreadyVisited {
+			root.walk(visited, visitFn)
+		}
+	}
+}
+
+func (cgNode *CgNode) walk(visited map[*CgNode]struct{}, fn WalkFn) {
+	fn(cgNode)
+
+	for _, neighbor := range cgNode.Neighbors {
+		if neighbor == nil {
+			panic("impossible")
+		}
+
+		if _, alreadyVisited := visited[neighbor]; !alreadyVisited {
+			visited[neighbor] = struct{}{}
+			neighbor.walk(visited, fn)
+		}
+	}
+}
+
+func (cg *CallGraph) resolveImport(file ParsedFile, defNode *sitter.Node, calleeName string) *CgNode {
+	// 1. Resolve the import to a file path
+	// 2. Parse the file into a Language.Module struct
+	// 3. Find the function definition in the module that the import resolves to
+	// 4. Create a call graph for that node.
+
+	// Resolve the import to a file.
+	filePath := file.FilePathOfImport(defNode)
+	if filePath == nil {
+		return nil
+	}
+
+	// Check if the module is already importedFile
+	importedFile, exists := cg.ModuleCache[*filePath]
+	if !exists {
+		var err error
+		importedFile, err = ParseFile(file.Module().Language, *filePath)
+		if err != nil {
+			// TODO: return error when file parse fails.
+			return nil
+		}
+		cg.ModuleCache[*filePath] = importedFile
+	}
+
+	// Find the function definition in the module
+	def := importedFile.ResolveExportedSymbol(calleeName)
+	if def == nil {
+		return nil
+	}
+
+	if importedFile.IsImport(def) {
+		// TODO: recursive imports?
+		return cg.resolveImport(importedFile, def, calleeName)
+	}
+
+	if importedFile.IsFunctionDef(def) {
+		// TODO: check for infinite loop, if we need caching
+		cgNode := cg.traverseFunction(importedFile, def)
+		return cgNode
+	} else {
+		// TODO: what cases did we not handle?
+		return nil
+	}
 }

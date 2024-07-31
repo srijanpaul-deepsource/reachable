@@ -23,19 +23,28 @@ func (c *CallExprWalker) OnLeaveNode(node *sitter.Node) {
 	// empty because we aren't interested in the exit event
 }
 
-func DotGraphFromFile(file ParsedFile, moduleCache map[string]ParsedFile) *dot.Graph {
+func CallGraphFromFile(file ParsedFile, moduleCache map[string]ParsedFile) *CallGraph {
 	cg := NewCallGraph()
 	cg.ModuleCache = moduleCache
 	cgWalker := &CallExprWalker{callGraph: cg, file: file}
 	util.WalkTree(file.Module().Ast, cgWalker)
 
+	return cg
+}
+
+func Cg2Dg(cg *CallGraph) *dot.Graph {
 	graph := dot.NewGraph()
 	visited := make(map[*CgNode]dot.Node)
-	for _, cgNode := range cgWalker.callGraph.CallGraphOfNode {
+	for _, cgNode := range cg.CallGraphOfNode {
 		cgNode.ToDotNode(cg, graph, visited)
 	}
 
 	return graph
+}
+
+func DotGraphFromFile(file ParsedFile, moduleCache map[string]ParsedFile) *dot.Graph {
+	cg := CallGraphFromFile(file, moduleCache)
+	return Cg2Dg(cg)
 }
 
 func DotGraphFromTsQuery(queryStr string, file ParsedFile) *dot.Graph {

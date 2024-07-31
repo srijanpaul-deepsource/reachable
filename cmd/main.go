@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/srijanpaul-deepsource/reachable/pkg/sniper"
-
 )
 
 func test() {
@@ -47,4 +46,3 @@ func main() {
 		panic(err)
 	}
 }
-

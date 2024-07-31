@@ -30,7 +30,7 @@ func findProjectRoot(filePath string) (*string, error) {
 		return nil, err
 	}
 
-	for dir := filepath.Dir(absPath); dir != "/"; dir = filepath.Dir(dir) {
+	for dir := filepath.Dir(absPath); dir != "/"; {
 		filesInRoot := []string{"setup.py", "setup.cfg", "pyproject.toml"}
 
 		for _, file := range filesInRoot {
@@ -40,6 +40,14 @@ func findProjectRoot(filePath string) (*string, error) {
 				return &dir, nil
 			}
 		}
+
+		nextDir := filepath.Dir(dir)
+		nextDirBaseName := filepath.Base(nextDir)
+		if nextDirBaseName == "site-packages" {
+			return &dir, nil
+		}
+
+		dir = filepath.Clean(nextDir)
 	}
 
 	return nil, fmt.Errorf("could not find a parent directory with setup.py")
@@ -104,7 +112,8 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 
 				return decls
 			} else {
-				panic(fmt.Sprintf("lhs type: %s, rhs: %s", lhs.Type(), rhs.Type()))
+				// panic(fmt.Sprintf("lhs type: %s, rhs: %s", lhs.Type(), rhs.Type()))
+				return nil
 			}
 			// TODO@(Srijan/Tushar) – Handle other assignment patterns
 		}
@@ -134,7 +143,9 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 					}
 				case "aliased_import":
 					{
-						panic("not implemented")
+						aliasNode := nameNode.ChildByFieldName("alias")
+						name := aliasNode.Content(py.module.Source)
+						decls = append(decls, Decl{name, node})
 					}
 				default:
 					panic("Imported symbol is a " + nameNode.Type())
@@ -207,10 +218,9 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 	// TODO(@Tushar/Srijan): `import *` is not handled
 	var moduleName string
 	var itemName string
+	upLevel := 0
 	if node.Type() == "import_from_statement" {
 		moduleName = node.ChildByFieldName("module_name").Content(py.module.Source)
-		upLevel := 0
-
 		for strings.HasPrefix(moduleName, ".") {
 			moduleName = moduleName[1:]
 			upLevel++
@@ -224,19 +234,29 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 		return nil
 	}
 
-	// println("moduleName:", moduleName)
 	baseModulePath := filepath.Join(strings.Split(moduleName, ".")...)
 
+	relPaths := []string{".", "src"}
+	var rootPath string
+	if upLevel > 0 {
+		rootPath = py.Module().FileName
+		for i := 0; i < upLevel; i++ {
+			rootPath = filepath.Dir(rootPath)
+		}
+	} else {
+		rootPath = *py.Module().ProjectRoot
+		// TODO: take site packages path as an argument
+		relPaths = append(relPaths, "venv/lib/python3.12/site-packages")
+	}
 	modulePaths := []string{
 		filepath.Join(baseModulePath, itemName),
 		baseModulePath,
 	}
 
-	relPaths := []string{".", "src"}
 	for _, relPath := range relPaths {
 		for _, modulePath := range modulePaths {
-			possibleFileA := filepath.Join(*py.Module().ProjectRoot, relPath, modulePath, "__init__.py")
-			possibleFileB := filepath.Join(*py.Module().ProjectRoot, relPath, modulePath+".py")
+			possibleFileA := filepath.Join(rootPath, relPath, modulePath, "__init__.py")
+			possibleFileB := filepath.Join(rootPath, relPath, modulePath+".py")
 
 			if _, err := os.Stat(possibleFileA); err == nil {
 				py.module.FilePathOfImport[node] = possibleFileA
@@ -261,4 +281,13 @@ func (py *Python) ResolveExportedSymbol(name string) *sitter.Node {
 
 	moduleScope := globalScope.Children[0]
 	return moduleScope.Symbols[name]
+}
+
+func (py *Python) PackageName() *string {
+	if py.module.ProjectRoot == nil {
+		return nil
+	}
+
+	baseName := filepath.Base(*py.module.ProjectRoot)
+	return &baseName
 }
