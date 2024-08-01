@@ -165,6 +165,20 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 
 			return decls
 		}
+
+	case "import_statement":
+		{
+			// TODO: use children with field name and support multple.
+			module := node.ChildByFieldName("name")
+			if module.Type() == "dotted_name" {
+				name := module.Content(py.module.Source)
+				if strings.Contains(name, ".") {
+					// TODO: import dotted import statements (and handle in callgraph)
+				} else {
+					return []Decl{{name, node}}
+				}
+			}
+		}
 	}
 
 	return nil
@@ -218,6 +232,10 @@ func (py *Python) NameOfFunction(node *sitter.Node) *string {
 
 func (py *Python) IsImport(node *sitter.Node) bool {
 	return node.Type() == "import_from_statement" || node.Type() == "import_statement"
+}
+
+func (py *Python) IsModuleImport(node *sitter.Node) bool {
+	return node.Type() == "import_statement"
 }
 
 func (py *Python) FilePathOfImport(node *sitter.Node) *string {
@@ -325,12 +343,11 @@ func (py *Python) FunctionDefFromNode(node *sitter.Node) *sitter.Node {
 
 func (py *Python) ResolveExportedSymbol(name string) *sitter.Node {
 	globalScope := py.Module().GlobalScope
-	if len(globalScope.Children) == 0 {
-		panic("Malformed global scope with no child scopes")
-	}
+	return globalScope.Symbols[name]
+}
 
-	moduleScope := globalScope.Children[0]
-	return moduleScope.Symbols[name]
+func (py *Python) GetObjectAndProperty(node *sitter.Node) (*sitter.Node, *sitter.Node) {
+	return node.ChildByFieldName("object"), node.ChildByFieldName("attribute")
 }
 
 func (py *Python) PackageName() *string {

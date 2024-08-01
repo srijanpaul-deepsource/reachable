@@ -9,7 +9,7 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-var blockNodeTypes = []string{
+var ScopeNodeTypes = []string{
 	"module",
 	"function_definition",
 	"class_definition",
@@ -98,17 +98,8 @@ func (s *Scope) Lookup(name string) *sitter.Node {
 // makeLexicalScopeTree generates a scope tree from the AST, along with a mapping from
 // block nodes to scope objects
 func makeLexicalScopeTree(lang ParsedFile, root *sitter.Node) (*Scope, ScopeOfNode) {
-	globalScope := &Scope{
-		Parent:           nil,
-		AstNode:          root,
-		Symbols:          make(map[string]*sitter.Node),
-		FilePathOfImport: make(map[*sitter.Node]string),
-		NameOfNode:       make(map[*sitter.Node]string),
-	}
 	scopeOfNode := make(ScopeOfNode)
-	scopeOfNode[root] = globalScope
-
-	makeLexicalScopeTree_(lang, root, globalScope, scopeOfNode)
+	globalScope := makeLexicalScopeTree_(lang, root, nil, scopeOfNode)
 	return globalScope, scopeOfNode
 }
 
@@ -126,9 +117,9 @@ func makeLexicalScopeTree_(
 	node *sitter.Node,
 	scope *Scope,
 	scopeOfNode ScopeOfNode,
-) {
+) *Scope {
 	nodeType := node.Type()
-	isBlockNode := slices.Contains(blockNodeTypes, nodeType)
+	isBlockNode := slices.Contains(ScopeNodeTypes, nodeType)
 
 	decls := lang.GetDecls(node)
 	for _, decl := range decls {
@@ -150,21 +141,27 @@ func makeLexicalScopeTree_(
 			FilePathOfImport: make(map[*sitter.Node]string),
 			NameOfNode:       make(map[*sitter.Node]string),
 		}
-		nextScope.Parent = scope
+
 		scopeOfNode[node] = nextScope
-		scope.Children = append(scope.Children, nextScope)
+		if scope != nil {
+			scope.Children = append(scope.Children, nextScope)
+		} else {
+			scope = nextScope // root
+		}
 	}
 
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		child := node.NamedChild(i)
 		makeLexicalScopeTree_(lang, child, nextScope, scopeOfNode)
 	}
+
+	return scope
 }
 
 // findNearestBlockNode finds the nearest surrounding block node for any AST node
 func findNearestBlockNode(node *sitter.Node) *sitter.Node {
 	for node != nil {
-		if slices.Contains(blockNodeTypes, node.Type()) {
+		if slices.Contains(ScopeNodeTypes, node.Type()) {
 			return node
 		}
 		node = node.Parent()

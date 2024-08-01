@@ -41,10 +41,10 @@ type ParsedFile interface {
 	// IsFunctionDef returns `true` if the node is a function definition/expression
 	IsFunctionDef(*sitter.Node) bool
 
-	// // IsDottedExpr returns `true` if the argument is a member expression like "foo.bar".
-	// IsDottedExpr(*sitter.Node) bool
-	// // GetObjectAndProperty returns the object and property from a dotted expr (`foo`, `bar`) from `foo.bar`.
-	// GetObjectAndProperty(*sitter.Node) (*sitter.Node, *sitter.Node)
+	// IsDottedExpr returns `true` if the argument is a member expression like "foo.bar".
+	IsDottedExpr(*sitter.Node) bool
+	// GetObjectAndProperty returns the object and property from a dotted expr (`foo`, `bar`) from `foo.bar`.
+	GetObjectAndProperty(*sitter.Node) (*sitter.Node, *sitter.Node)
 
 	// Given an arbitrary decl node, resolve it to a function body.
 	// For example, in this python snippet:
@@ -70,6 +70,7 @@ type ParsedFile interface {
 	NameOfFunction(*sitter.Node) *string
 	// IsImport returns `true` if the node is a import statement (or expression, in some languages)
 	IsImport(*sitter.Node) bool
+	IsModuleImport(*sitter.Node) bool
 	// FilePathOfImport resolves an import statement node to an absolute file path
 	// Will return an empty string when resolution fails
 	// TODO: single import can have multiple files that it imports. maybe this should

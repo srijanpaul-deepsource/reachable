@@ -34,33 +34,28 @@ func Test_Scope(t *testing.T) {
 	require.NotNil(t, scope)
 	require.NotNil(t, scopeOfNode)
 
-	require.Empty(t, scope.Symbols)
-	require.Len(t, scope.Children, 1)
-	child := scope.Children[0]
-	require.NotNil(t, child)
-
-	assert.Contains(t, child.Symbols, "foo")
-	assert.Contains(t, child.Symbols, "x")
-	assert.Equal(t, "'x'", child.Symbols["x"].Content(pyBytes))
+	assert.Contains(t, scope.Symbols, "foo")
+	assert.Contains(t, scope.Symbols, "x")
+	assert.Equal(t, "'x'", scope.Symbols["x"].Content(pyBytes))
 
 	// test class decl: class Foo:
-	assert.Contains(t, child.Symbols, "Foo")
-	assert.Equal(t, "class_definition", child.Symbols["Foo"].Type())
+	assert.Contains(t, scope.Symbols, "Foo")
+	assert.Equal(t, "class_definition", scope.Symbols["Foo"].Type())
 
 	// test assignment patterns: y, z = 1, 2
-	assert.Contains(t, child.Symbols, "y")
-	assert.Contains(t, child.Symbols, "z")
+	assert.Contains(t, scope.Symbols, "y")
+	assert.Contains(t, scope.Symbols, "z")
 
 	// type annotations a, b: Tuple[int, int] = 1, 2
-	assert.Contains(t, child.Symbols, "a")
-	assert.Equal(t, "1", child.Symbols["a"].Content(pyBytes))
-	assert.Contains(t, child.Symbols, "b")
-	assert.Equal(t, "2", child.Symbols["b"].Content(pyBytes))
+	assert.Contains(t, scope.Symbols, "a")
+	assert.Equal(t, "1", scope.Symbols["a"].Content(pyBytes))
+	assert.Contains(t, scope.Symbols, "b")
+	assert.Equal(t, "2", scope.Symbols["b"].Content(pyBytes))
 
-	assert.NotContains(t, child.Symbols, "bar")
+	assert.NotContains(t, scope.Symbols, "bar")
 
-	require.Len(t, child.Children, 2)
-	child = child.Children[0]
+	require.Len(t, scope.Children, 2)
+	child := scope.Children[0]
 	require.NotNil(t, child)
 	require.Contains(t, child.Symbols, "bar")
 

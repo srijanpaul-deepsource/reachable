@@ -9,7 +9,15 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${fileDirname}"
+      "program": "${workspaceFolder}/cmd",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--language",
+        "py",
+        "--lockfile",
+        "./test-projects/pyproject/requirements.txt",
+        "./test-projects/pyproject/src/mypackage/__main__.py"
+      ]
     }
   ]
 }
