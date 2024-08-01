@@ -3,6 +3,7 @@ package sniper
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/emicklei/dot"
@@ -88,6 +89,7 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 		if calleeName == nil {
 			return nil
 		}
+
 		importedDef := cg.resolveImport(file, defNode, *calleeName)
 		if importedDef != nil {
 			cg.CallGraphOfNode[node] = importedDef
@@ -176,13 +178,30 @@ func (cg *CallGraph) resolveCallExpr(file ParsedFile, callExpr *sitter.Node) *si
 		return nil
 	}
 
+	callee := file.GetCallee(callExpr)
+	if callee == nil {
+		return nil
+	}
+
+	// if file.IsDottedExpr(callee) {
+	// 	object := file.GetObject(callee)
+	// }
+
 	name := file.GetCalleeName(callExpr)
 	if name == nil {
 		return nil
 	}
 
 	decl := scope.Lookup(*name)
-	return decl
+	if decl == nil {
+		return nil
+	}
+
+	if file.IsFunctionDef(decl) || file.IsImport(decl) {
+		return decl
+	} else {
+		return file.FunctionDefFromNode(decl)
+	}
 }
 
 // ToDotGraph converts a CallGraph to a dot graph for debugging/visualization
@@ -202,11 +221,18 @@ func (cgNode *CgNode) ToDotNode(cg *CallGraph,
 		return cached
 	}
 
-	fileName := cgNode.File.Module().FileName
-	fileName = strings.TrimSuffix(fileName, path.Ext(fileName))
+	filePath := cgNode.File.Module().FileName
+	if cgNode.File.Module().ProjectRoot != nil {
+		relFilePath, err := filepath.Rel(*cgNode.File.Module().ProjectRoot, filePath)
+		if err == nil {
+			projectName := filepath.Base(*cgNode.File.Module().ProjectRoot)
+			filePath = projectName + "::" + relFilePath
+		}
+	}
+	filePath = strings.TrimSuffix(filePath, path.Ext(filePath))
 
 	current := g.Node(fmt.Sprintf("%p", &cgNode))
-	label := fileName + ":(unresolved)"
+	label := filePath + ":(unresolved)"
 
 	if cgNode.FuncName != nil {
 		if cgNode.Func == nil {
@@ -214,7 +240,7 @@ func (cgNode *CgNode) ToDotNode(cg *CallGraph,
 			// we do not know which module it comes from.
 			label = "(unresolved):" + *cgNode.FuncName
 		} else {
-			label = fileName + ":" + *cgNode.FuncName
+			label = filePath + ":" + *cgNode.FuncName
 		}
 	}
 
@@ -269,6 +295,7 @@ func (cg *CallGraph) resolveImport(file ParsedFile, defNode *sitter.Node, callee
 	// Resolve the import to a file.
 	filePath := file.FilePathOfImport(defNode)
 	if filePath == nil {
+		println(calleeName, "has no file path", file.Module().FileName)
 		return nil
 	}
 
@@ -300,7 +327,11 @@ func (cg *CallGraph) resolveImport(file ParsedFile, defNode *sitter.Node, callee
 		cgNode := cg.traverseFunction(importedFile, def)
 		return cgNode
 	} else {
-		// TODO: what cases did we not handle?
-		return nil
+		fun := importedFile.FunctionDefFromNode(def)
+		if fun != nil {
+			return cg.traverseFunction(importedFile, fun)
+		}
 	}
+
+	return nil
 }

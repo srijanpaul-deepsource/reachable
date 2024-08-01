@@ -13,7 +13,8 @@ import (
 )
 
 type Python struct {
-	module *Module
+	module           *Module
+	SitePackagesPath string
 }
 
 func (py *Python) Module() *Module {
@@ -63,7 +64,9 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 		ProjectRoot:      projectRoot,
 		TsLanguage:       treeSitterPy.GetLanguage(),
 		FilePathOfImport: make(map[*sitter.Node]string),
-	}}
+	},
+		SitePackagesPath: "/Users/tusharsadhwani/code/goreachable/test-projects/pyproject/venv/lib/python3.12/site-packages",
+	}
 
 	ast, err := sitter.ParseCtx(
 		context.Background(), source, python.module.TsLanguage,
@@ -125,6 +128,14 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 				return []Decl{{funcName.Content(py.module.Source), node}}
 			}
 			// TODO@(Srijan/Tushar) bind function parameters
+		}
+
+	case "class_definition":
+		{
+			className := node.ChildByFieldName("name")
+			if className != nil {
+				return []Decl{{className.Content(py.module.Source), node}}
+			}
 		}
 
 	case "import_from_statement":
@@ -253,8 +264,6 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 		}
 	} else {
 		rootPath = *py.Module().ProjectRoot
-		// TODO: take site packages path as an argument
-		relPaths = append(relPaths, "venv/lib/python3.12/site-packages")
 	}
 	modulePaths := []string{baseModulePath}
 	if itemName != "" {
@@ -263,22 +272,55 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 
 	for _, relPath := range relPaths {
 		for _, modulePath := range modulePaths {
-			possibleFileA := filepath.Join(rootPath, relPath, modulePath, "__init__.py")
-			possibleFileB := filepath.Join(rootPath, relPath, modulePath+".py")
-
-			if _, err := os.Stat(possibleFileA); err == nil {
-				py.module.FilePathOfImport[node] = possibleFileA
-				return &possibleFileA
+			fmt.Fprintf(os.Stderr, "%v  %v  %v\n", py.SitePackagesPath, relPath, modulePath)
+			possibleFiles := []string{
+				filepath.Join(rootPath, relPath, modulePath, "__init__.py"),
+				filepath.Join(rootPath, relPath, modulePath+".py"),
+				filepath.Join(py.SitePackagesPath, relPath, modulePath, "__init__.py"),
+				filepath.Join(py.SitePackagesPath, relPath, modulePath+".py"),
 			}
-
-			if _, err := os.Stat(possibleFileB); err == nil {
-				py.module.FilePathOfImport[node] = possibleFileB
-				return &possibleFileB
+			for _, possibleFile := range possibleFiles {
+				if _, err := os.Stat(possibleFile); err == nil {
+					py.module.FilePathOfImport[node] = possibleFile
+					return &possibleFile
+				}
 			}
 		}
 	}
 
+	println(node.Content(py.module.Source), "no filepath found")
 	return nil
+}
+
+func (py *Python) IsDottedExpr(node *sitter.Node) bool {
+	return node.Type() == "attribute"
+}
+
+func (py *Python) GetCallee(callExpr *sitter.Node) *sitter.Node {
+	return callExpr.ChildByFieldName("function")
+}
+
+func (py *Python) FunctionDefFromNode(node *sitter.Node) *sitter.Node {
+	if node.Type() != "class_definition" {
+		return nil
+	}
+
+	// TODO: super calls?
+	body := node.ChildByFieldName("body")
+	// TODO: make this a reverse iterator instead to find the last __init__
+	// because @overload's exist
+	return util.FindMatchingChild(body, func(child *sitter.Node) bool {
+		if child.Type() != "function_definition" {
+			return false
+		}
+
+		funcName := child.ChildByFieldName("name")
+		if funcName == nil {
+			return false
+		}
+
+		return funcName.Content(py.module.Source) == "__init__"
+	})
 }
 
 func (py *Python) ResolveExportedSymbol(name string) *sitter.Node {

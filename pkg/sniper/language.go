@@ -40,6 +40,27 @@ type ParsedFile interface {
 	IsCallExpr(*sitter.Node) bool
 	// IsFunctionDef returns `true` if the node is a function definition/expression
 	IsFunctionDef(*sitter.Node) bool
+
+	// // IsDottedExpr returns `true` if the argument is a member expression like "foo.bar".
+	// IsDottedExpr(*sitter.Node) bool
+	// // GetObjectAndProperty returns the object and property from a dotted expr (`foo`, `bar`) from `foo.bar`.
+	// GetObjectAndProperty(*sitter.Node) (*sitter.Node, *sitter.Node)
+
+	// Given an arbitrary decl node, resolve it to a function body.
+	// For example, in this python snippet:
+	// ```python
+	// class Foo:
+	// 	def __init__():
+	// 		...
+	//```
+	// `Foo` is a class node, but it can be "called" via the `__init__`.
+	// So the `def __init__()...` node–a function_definition—is returned.
+	FunctionDefFromNode(*sitter.Node) *sitter.Node
+
+	// GetCallee returns the callee for a call expression
+	// The argument *must* be a call expression.
+	GetCallee(*sitter.Node) *sitter.Node
+
 	// GetCalleeName returns the name of the callee in a function call node
 	GetCalleeName(*sitter.Node) *string
 

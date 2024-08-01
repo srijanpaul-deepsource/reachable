@@ -17,6 +17,10 @@ def foo():
 		
 y, z = 1, 2
 a, b: Tuple[int, int] = 1, 2
+
+class Foo:
+	def __init__(self: Foo):
+		pass
 `
 
 var pyBytes = []byte(pySource)
@@ -39,6 +43,10 @@ func Test_Scope(t *testing.T) {
 	assert.Contains(t, child.Symbols, "x")
 	assert.Equal(t, "'x'", child.Symbols["x"].Content(pyBytes))
 
+	// test class decl: class Foo:
+	assert.Contains(t, child.Symbols, "Foo")
+	assert.Equal(t, "class_definition", child.Symbols["Foo"].Type())
+
 	// test assignment patterns: y, z = 1, 2
 	assert.Contains(t, child.Symbols, "y")
 	assert.Contains(t, child.Symbols, "z")
@@ -51,7 +59,7 @@ func Test_Scope(t *testing.T) {
 
 	assert.NotContains(t, child.Symbols, "bar")
 
-	require.Len(t, child.Children, 1)
+	require.Len(t, child.Children, 2)
 	child = child.Children[0]
 	require.NotNil(t, child)
 	require.Contains(t, child.Symbols, "bar")

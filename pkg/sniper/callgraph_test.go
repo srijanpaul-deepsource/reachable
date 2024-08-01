@@ -88,3 +88,37 @@ def g():
 
 	assert.Equal(t, want, got)
 }
+
+func Test_CallGraphClassCtors(t *testing.T) {
+	code := `
+class A:
+	def __init__(x: int) -> int:
+		pass
+	
+def foo():
+	A()
+
+foo()
+	`
+
+	py, err := ParsePython("test.py", []byte(code))
+	if err != nil {
+		panic(err)
+	}
+
+	dg := DotGraphFromTsQuery(
+		`(call function:(identifier) @id (.match? @id "foo")) @call`,
+		py,
+	)
+	require.NotNil(t, dg)
+	got := removeWhitespace(dg.String())
+
+	// TODO(@Srijan/Tushar): ideally, this would be `A.__init__`, not `__init__`
+	want := removeWhitespace(`digraph {
+		n1[label="test:foo"];
+		n2[label="test:__init__"];
+		n1 -> n2;
+	}`)
+
+	assert.Equal(t, want, got)
+}

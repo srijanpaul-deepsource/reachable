@@ -37,3 +37,18 @@ func ChildrenWithFieldName(node *sitter.Node, fieldName string) []*sitter.Node {
 
 	return children
 }
+
+// FindMatchingChild iterates over all children of a node—both named and unnamed—and returns the
+// first child that matches the predicate function.
+func FindMatchingChild(node *sitter.Node, predicate func(*sitter.Node) bool) *sitter.Node {
+	nChildren := int(node.ChildCount())
+
+	for i := 0; i < nChildren; i++ {
+		child := node.Child(i)
+		if predicate(child) {
+			return child
+		}
+	}
+
+	return nil
+}
