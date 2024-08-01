@@ -51,6 +51,8 @@ type ParsedFile interface {
 	IsImport(*sitter.Node) bool
 	// FilePathOfImport resolves an import statement node to an absolute file path
 	// Will return an empty string when resolution fails
+	// TODO: single import can have multiple files that it imports. maybe this should
+	// return a map of imported node/node-name to the filepath instead.
 	FilePathOfImport(*sitter.Node) *string
 	// ResolveExportedSymbol resolves an exported symbol to its definition node
 	ResolveExportedSymbol(string) *sitter.Node

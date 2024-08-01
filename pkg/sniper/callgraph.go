@@ -24,12 +24,12 @@ type CgNode struct {
 	File ParsedFile
 }
 
-func NewCgNode(file ParsedFile, fn *sitter.Node) *CgNode {
+func NewCgNode(file ParsedFile, fn *sitter.Node) CgNode {
 	var funcName *string
 	if fn != nil {
 		funcName = file.NameOfFunction(fn)
 	}
-	return &CgNode{Func: fn, FuncName: funcName, File: file}
+	return CgNode{Func: fn, FuncName: funcName, File: file}
 }
 
 // CallGraph maps a function definition or call-expression AST node
@@ -89,13 +89,14 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 			return nil
 		}
 		importedDef := cg.resolveImport(file, defNode, *calleeName)
-		cg.CallGraphOfNode[node] = importedDef
+		if importedDef != nil {
+			cg.CallGraphOfNode[node] = importedDef
+		}
 		return importedDef
 	}
 
 	// Traverse the body of that function, and create the call-graph.
 	cgNode := cg.traverseFunction(file, defNode)
-	cg.CallGraphOfNode[node] = cgNode
 	return cgNode
 }
 
@@ -147,24 +148,24 @@ func (walker *callExprWalker) OnLeaveNode(node *sitter.Node) {
 // traverseFunction traverses the body of `fn` (a function def node)
 // and builds a CgNode where the root node is `fn`
 func (cg *CallGraph) traverseFunction(file ParsedFile, fn *sitter.Node) *CgNode {
-	cached := cg.CallGraphOfNode[fn]
-	if cached != nil {
-		return cached
+	cachedNode, cached := cg.CallGraphOfNode[fn]
+	if cached {
+		return cachedNode
 	}
 
 	cgNode := NewCgNode(file, fn)
-	cg.CallGraphOfNode[fn] = cgNode
+	cg.CallGraphOfNode[fn] = &cgNode
 
 	walker := callExprWalker{
 		file:          file,
-		currentCgNode: cgNode,
+		currentCgNode: &cgNode,
 		cg:            cg,
 	}
 
 	body := file.BodyOfFunction(fn)
 	util.WalkTree(body, &walker)
 
-	return cgNode
+	return &cgNode
 }
 
 // resolveCallExpr takes a call expression node, and
@@ -234,6 +235,10 @@ func (callGraph *CallGraph) Walk(visitFn WalkFn) {
 	visited := make(map[*CgNode]struct{})
 
 	for _, root := range callGraph.CallGraphOfNode {
+		if root == nil {
+			panic("impossible")
+		}
+
 		if _, alreadyVisited := visited[root]; !alreadyVisited {
 			root.walk(visited, visitFn)
 		}

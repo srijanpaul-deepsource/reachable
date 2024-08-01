@@ -226,12 +226,20 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 			upLevel++
 		}
 
-		// TODO: there's no `children_by_field_name` equivalent in go
+		// TODO: there are multiple `name` field here, right now we just use the
+		// first one. refer to the TODO in `language.go` about `FilePathOfImport()`,
+		// we should build a map of import node to filepath instead.
+		// To do that we can use the ChildrenWithFieldName helper here.
 		itemName = node.ChildByFieldName("name").Content(py.module.Source)
 
 	} else if node.Type() == "import_statement" {
-		// TODO
-		return nil
+		moduleName = node.ChildByFieldName("name").Content(py.module.Source)
+		for strings.HasPrefix(moduleName, ".") {
+			moduleName = moduleName[1:]
+			upLevel++
+		}
+
+		itemName = ""
 	}
 
 	baseModulePath := filepath.Join(strings.Split(moduleName, ".")...)
@@ -248,9 +256,9 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 		// TODO: take site packages path as an argument
 		relPaths = append(relPaths, "venv/lib/python3.12/site-packages")
 	}
-	modulePaths := []string{
-		filepath.Join(baseModulePath, itemName),
-		baseModulePath,
+	modulePaths := []string{baseModulePath}
+	if itemName != "" {
+		modulePaths = append(modulePaths, filepath.Join(baseModulePath, itemName))
 	}
 
 	for _, relPath := range relPaths {
