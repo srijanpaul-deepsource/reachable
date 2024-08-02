@@ -333,24 +333,37 @@ func (cgNode *CgNode) ToDotNode(cg *CallGraph,
 	return current
 }
 
-type WalkFn func(*CgNode)
+type WalkFn func(*CgNode, []*CgNode)
 
-func (callGraph *CallGraph) Walk(visitFn WalkFn) {
+func (callGraph *CallGraph) Walk(fromFile string, visitFn WalkFn) {
 	visited := make(map[*CgNode]struct{})
 
+	fromFile, err := filepath.Abs(fromFile)
+	if err != nil {
+		panic(err)
+	}
+
+	var path []*CgNode
 	for _, root := range callGraph.CallGraphOfNode {
 		if root == nil {
 			panic("impossible")
 		}
 
+		if root.File.Module().FileName != fromFile {
+			continue
+		}
+
 		if _, alreadyVisited := visited[root]; !alreadyVisited {
-			root.walk(visited, visitFn)
+			path = append(path, root)
+			root.walk(visited, &path, visitFn)
+			path = path[:len(path)-1]
 		}
 	}
 }
 
-func (cgNode *CgNode) walk(visited map[*CgNode]struct{}, fn WalkFn) {
-	fn(cgNode)
+func (cgNode *CgNode) walk(visited map[*CgNode]struct{}, path *[]*CgNode, fn WalkFn) {
+	*path = append(*path, cgNode)
+	fn(cgNode, *path)
 
 	for _, neighbor := range cgNode.Neighbors {
 		if neighbor == nil {
@@ -359,9 +372,11 @@ func (cgNode *CgNode) walk(visited map[*CgNode]struct{}, fn WalkFn) {
 
 		if _, alreadyVisited := visited[neighbor]; !alreadyVisited {
 			visited[neighbor] = struct{}{}
-			neighbor.walk(visited, fn)
+			neighbor.walk(visited, path, fn)
 		}
 	}
+
+	*path = (*path)[:len(*path)-1]
 }
 
 func (cg *CallGraph) cgNodeFromImport(file ParsedFile, defNode *sitter.Node, calleeName string) *CgNode {

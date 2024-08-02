@@ -65,7 +65,7 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 		TsLanguage:       treeSitterPy.GetLanguage(),
 		FilePathOfImport: make(map[*sitter.Node]string),
 	},
-		SitePackagesPath: "/Users/tusharsadhwani/code/goreachable/test-projects/pyproject/venv/lib/python3.12/site-packages",
+		SitePackagesPath: "/Users/srijan-paul/work/reachable/test-projects/pyproject/venv/lib/python3.12/site-packages",
 	}
 
 	ast, err := sitter.ParseCtx(
@@ -290,7 +290,7 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 
 	for _, relPath := range relPaths {
 		for _, modulePath := range modulePaths {
-			fmt.Fprintf(os.Stderr, "%v  %v  %v\n", py.SitePackagesPath, relPath, modulePath)
+			// fmt.Fprintf(os.Stderr, "%v  %v  %v\n", py.SitePackagesPath, relPath, modulePath)
 			possibleFiles := []string{
 				filepath.Join(rootPath, relPath, modulePath, "__init__.py"),
 				filepath.Join(rootPath, relPath, modulePath+".py"),
@@ -306,7 +306,6 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 		}
 	}
 
-	println(node.Content(py.module.Source), "no filepath found")
 	return nil
 }
 
