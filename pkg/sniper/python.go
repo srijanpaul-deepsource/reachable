@@ -95,12 +95,14 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 			FilePathOfImport: make(map[*sitter.Node]string),
 		},
 	}
-	if projectRoot != nil {
-		// If a `venv` is found at project root, set site packages path as well.
-		sitePackagesPath, err := findVenvSitePackages(*projectRoot)
-		if err == nil {
-			python.SitePackagesPath = sitePackagesPath
-		}
+
+	codePath := os.Getenv("CODE_PATH")
+	if codePath == "" {
+		codePath, _ = os.Getwd()
+	}
+	sitePackagesPath, err := findVenvSitePackages(codePath)
+	if err == nil {
+		python.SitePackagesPath = sitePackagesPath
 	}
 
 	ast, err := sitter.ParseCtx(
