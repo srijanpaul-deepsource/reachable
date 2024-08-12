@@ -209,11 +209,16 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 			module := node.ChildByFieldName("name")
 			if module.Type() == "dotted_name" {
 				name := module.Content(py.module.Source)
-				if strings.Contains(name, ".") {
-					// TODO: import dotted import statements (and handle in callgraph)
-				} else {
-					return []Decl{{name, node}}
+				decls := []Decl{}
+				for {
+					decls = append(decls, Decl{name, node})
+					lastDot := strings.LastIndex(name, ".")
+					if lastDot == -1 {
+						break
+					}
+					name = name[:lastDot]
 				}
+				return decls
 			}
 		}
 	}
