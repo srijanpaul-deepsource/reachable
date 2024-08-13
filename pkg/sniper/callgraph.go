@@ -420,6 +420,9 @@ func (cg *CallGraph) resolveImport(file ParsedFile, importStmt *sitter.Node, cal
 	}
 
 	// Find the function definition in the module
+	if originalName := file.NameOfAliasedImport(calleeName); originalName != nil {
+		calleeName = *originalName
+	}
 	def := importedFile.ResolveExportedSymbol(calleeName)
 	if def == nil {
 		return nil, nil

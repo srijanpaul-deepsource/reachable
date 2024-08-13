@@ -1,6 +1,6 @@
 from mypackage.util import assert_nonzero
-import requests
-import fastapi.routing
+from requests import get as apicall
+import fastapi.routing as fr
 
 
 def div(a, b):
@@ -18,10 +18,10 @@ def main():
 
 
 def request_from_dog_ceo():
-    response = requests.get("https://dog.ceo/api/breeds/image/random")
+    response = apicall("https://dog.ceo/api/breeds/image/random")
     print(response.json())
 
-    fastapi.routing.APIRoute("/foo")
+    fr.APIRoute("/foo")
 
 
 if __name__ == "__main__":
