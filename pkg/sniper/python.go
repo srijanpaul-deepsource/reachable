@@ -2,6 +2,7 @@ package sniper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,18 +55,54 @@ func findProjectRoot(filePath string) (*string, error) {
 	return nil, fmt.Errorf("could not find a parent directory with setup.py")
 }
 
+func findVenvSitePackages(rootFolder string) (string, error) {
+	files, err := os.ReadDir(rootFolder)
+	if err != nil {
+		return "", err
+	}
+	path, err := filepath.Abs(rootFolder)
+	if err != nil {
+		return "", err
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+
+		potentialVenvFolder := filepath.Join(path, file.Name())
+		sitePackagesPaths, err := filepath.Glob(filepath.Join(potentialVenvFolder, "lib", "**", "site-packages"))
+		if err != nil {
+			return "", err
+		}
+		if len(sitePackagesPaths) == 0 {
+			continue
+		}
+		return sitePackagesPaths[0], nil
+	}
+
+	return "", errors.New("no venv found")
+}
+
 func ParsePython(fileName string, source []byte) (*Python, error) {
 	projectRoot, _ := findProjectRoot(fileName)
+	python := &Python{
+		module: &Module{
+			FileName:         fileName,
+			Source:           source,
+			Language:         LangPy,
+			ProjectRoot:      projectRoot,
+			TsLanguage:       treeSitterPy.GetLanguage(),
+			FilePathOfImport: make(map[*sitter.Node]string),
+		},
+	}
 
-	python := &Python{module: &Module{
-		FileName:         fileName,
-		Source:           source,
-		Language:         LangPy,
-		ProjectRoot:      projectRoot,
-		TsLanguage:       treeSitterPy.GetLanguage(),
-		FilePathOfImport: make(map[*sitter.Node]string),
-	},
-		SitePackagesPath: "/Users/srijan-paul/work/reachable/test-projects/pyproject/venv/lib/python3.12/site-packages",
+	codePath := os.Getenv("CODE_PATH")
+	if codePath == "" {
+		codePath, _ = os.Getwd()
+	}
+	sitePackagesPath, err := findVenvSitePackages(codePath)
+	if err == nil {
+		python.SitePackagesPath = sitePackagesPath
 	}
 
 	ast, err := sitter.ParseCtx(
@@ -294,8 +331,12 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 			possibleFiles := []string{
 				filepath.Join(rootPath, relPath, modulePath, "__init__.py"),
 				filepath.Join(rootPath, relPath, modulePath+".py"),
-				filepath.Join(py.SitePackagesPath, relPath, modulePath, "__init__.py"),
-				filepath.Join(py.SitePackagesPath, relPath, modulePath+".py"),
+			}
+			if py.SitePackagesPath != "" {
+				possibleFiles = append(possibleFiles,
+					filepath.Join(py.SitePackagesPath, relPath, modulePath, "__init__.py"),
+					filepath.Join(py.SitePackagesPath, relPath, modulePath+".py"),
+				)
 			}
 			for _, possibleFile := range possibleFiles {
 				if _, err := os.Stat(possibleFile); err == nil {

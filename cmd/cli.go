@@ -19,7 +19,7 @@ type Config struct {
 	Language     *sitter.Language
 	ProjectRoot  *string
 	LockfilePath string
-	ShowDotGraph		 bool
+	ShowDotGraph bool
 	Files        []string
 }
 
@@ -195,8 +195,8 @@ func (c *Cli) Run() error {
 		callGraph := sniper.CallGraphFromFile(py, c.moduleCache)
 
 		if c.showDotGraph {
-		 dotGraph := sniper.Cg2Dg(callGraph)
-		 fmt.Println(dotGraph.String())
+			dotGraph := sniper.Cg2Dg(callGraph)
+			fmt.Println(dotGraph.String())
 		} else {
 			callGraph.Walk(c.files[0], visitCallGraphNode)
 		}
