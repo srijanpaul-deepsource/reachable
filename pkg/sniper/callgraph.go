@@ -68,7 +68,22 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 
 	// If not, find the function that the call-expression is calling.
 	// TODO(@Tushar/Srijan): Make this work for methods and not just identifiers
-	nextFile, nextNode := cg.resolveCallExpr(file, node)
+	resolvedCallExpr := cg.resolveCallExpr(file, node)
+
+	// TODO: resolve a single call node to multiple call graphs.
+	// This is because, a single call expression can resolve to multiple function defs.
+	// Eg:
+	// ```python
+	// f = lambda x : x - 1
+	// if condition:
+	// 	 f = lambda x : x + 1
+	// y = f(1) // <- `f` can be either of the lambdas.
+	// ```
+	if len(resolvedCallExpr) == 0 {
+		return nil
+	}
+
+	nextFile, nextNode := resolvedCallExpr[0].File, resolvedCallExpr[0].Node
 	if nextNode == nil {
 		calleeName := file.GetCalleeName(node)
 		if calleeName != nil {
@@ -171,53 +186,96 @@ func (cg *CallGraph) traverseFunction(file ParsedFile, fn *sitter.Node) *CgNode 
 	return &cgNode
 }
 
-// resolveExpr resolves an arbitrary expression to its initialization expr (a function/class definition)
+// ResolvedExpr contains the node that an expression "resolves" to.
+// See below.
+type ResolvedExpr struct {
+	// Node is the AST node that the expression resolves to.
+	Node *sitter.Node
+	// File is the file that the node belongs to
+	File ParsedFile
+}
+
+// resolveExpr resolves an arbitrary expression to class/function declarations
+// (there can be multiple)
 // e.g, In this snippet:
 // ```py
 // def foo(): ...
 // bar = foo
+// class A: ...
+// bar = A
 // ```
-// The identifier "bar" will be resolved to the function definition `def foo(): ...`
-func (cg *CallGraph) resolveExpr(file ParsedFile, node *sitter.Node) (ParsedFile, *sitter.Node) {
-	for !file.IsFunctionDef(node) {
-		var nextFile ParsedFile
-		var nextNode *sitter.Node
+// The identifier "bar" will be resolved to the list that contains
+// the nodes [`def foo(): ...`, `class A: ...`],
+func (cg *CallGraph) resolveExpr(file ParsedFile, node *sitter.Node) []ResolvedExpr {
+	var results []ResolvedExpr
 
-		if file.IsDottedExpr(node) {
-			// It's possible for a dotted expr to also be in the lookup table.
-			// This is because python imports are weird.
-			nextNode = cg.resolveIdentifier(file, node)
-			if nextNode != nil && file.IsImport(nextNode) {
-				name := node.Content(file.Module().Source)
-				nextFile, nextNode = cg.resolveImport(file, nextNode, name)
+	// scanIdentifier resolves an identifier to its declaration nodes
+	// (and files, if its imported), and then appends them to the results.
+	// Returns `true` if the identifier could be resolved to at least one declaration.
+	scanIdentifier := func(file ParsedFile, id *sitter.Node) bool {
+		resolved := cg.resolveIdentifier(file, id)
+		success := false
+
+		for _, resolvedNode := range resolved {
+			if file.IsFunctionDef(resolvedNode) {
+				results = append(results, ResolvedExpr{
+					Node: resolvedNode,
+					File: file,
+				})
+				success = true
+			} else if file.IsImport(resolvedNode) {
+				// identifier resolved to an import statement.
+				nameOfId := id.Content(file.Module().Source)
+				importedFile, nodeInImportedFile := cg.resolveImport(file, resolvedNode, nameOfId)
+
+				if importedFile != nil && nodeInImportedFile != nil {
+					results = append(results, ResolvedExpr{File: importedFile, Node: nodeInImportedFile})
+					success = true
+				}
 			} else {
-				nextFile, nextNode = cg.resolveDottedExpr(file, node)
+				funDef := file.FunctionDefFromNode(resolvedNode)
+				if funDef != nil {
+					results = append(results, ResolvedExpr{
+						Node: funDef,
+						File: file,
+					})
+					success = true
+				}
 			}
-		} else if node.Type() == "identifier" {
-			nextNode = cg.resolveIdentifier(file, node)
-			if nextNode != nil && file.IsImport(nextNode) {
-				name := node.Content(file.Module().Source)
-				nextFile, nextNode = cg.resolveImport(file, nextNode, name)
-			}
-		} else {
-			break
 		}
 
-		if nextFile != nil {
-			file = nextFile
-		}
+		return success
+	}
 
-		if nextNode != nil {
-			node = nextNode
-		} else {
-			break
+	if file.IsDottedExpr(node) {
+		// It's possible for a dotted expr to also be in the lookup table.
+		// This is because python imports are weird.
+		if !scanIdentifier(file, node) {
+			resolvedDottedExprs := cg.resolveDottedExpr(file, node)
+			for _, resolved := range resolvedDottedExprs {
+				nextFile, nextNode := resolved.File, resolved.Node
+				str := nextNode.Content(nextFile.Module().Source)
+				_ = str
+				results = append(results, cg.resolveExpr(nextFile, nextNode)...)
+			}
+		}
+	} else if node.Type() == "identifier" {
+		scanIdentifier(file, node)
+	} else if file.IsFunctionDef(node) {
+		results = append(results, ResolvedExpr{File: file, Node: node})
+	} else {
+		funDef := file.FunctionDefFromNode(node)
+		if funDef != nil {
+			results = append(results, ResolvedExpr{File: file, Node: funDef})
 		}
 	}
 
-	return file, node
+	return results
 }
 
-func (cg *CallGraph) resolveIdentifier(file ParsedFile, idNode *sitter.Node) *sitter.Node {
+// resolveIdentifier resolves an identifier to the list of expressions
+// that were assigned to it *within* the same file.
+func (cg *CallGraph) resolveIdentifier(file ParsedFile, idNode *sitter.Node) []*sitter.Node {
 	module := file.Module()
 
 	// 1. Find where this identifier was declared.
@@ -227,66 +285,97 @@ func (cg *CallGraph) resolveIdentifier(file ParsedFile, idNode *sitter.Node) *si
 	}
 
 	// TODO(@srijan/tushar): check for infinite loops
-	initExpr := scope.Lookup(idNode.Content(module.Source))
-	return initExpr
+	initExprs := scope.Lookup(idNode.Content(module.Source))
+	return initExprs
 }
 
 // TODO: test this very very very thoroughly
 
 // resolveDottedExpr takes a dotted expression node, and returns
 // the function definition or class/object node that it is bound to (if any could be found).
-func (cg *CallGraph) resolveDottedExpr(file ParsedFile, dottedExpr *sitter.Node) (ParsedFile, *sitter.Node) {
+func (cg *CallGraph) resolveDottedExpr(file ParsedFile, dottedExpr *sitter.Node) []ResolvedExpr {
 	object, property := file.GetObjectAndProperty(dottedExpr)
-
 	if object == nil || property == nil || property.Type() != "identifier" {
-		return nil, nil
+		return nil
 	}
 
-	nextFile, def := cg.resolveExpr(file, object)
-	if nextFile == nil || def == nil {
-		return nil, nil
-	}
-	if !slices.Contains(ScopeNodeTypes, def.Type()) {
-		return nil, nil
+	var results []ResolvedExpr
+
+	resolvedExprs := cg.resolveExpr(file, object)
+	for _, resolved := range resolvedExprs {
+		nextFile, def := resolved.File, resolved.Node
+		if nextFile == nil || def == nil {
+			continue
+		}
+		if !slices.Contains(ScopeNodeTypes, def.Type()) {
+			continue
+		}
+
+		scope := nextFile.Module().ScopeOfNode[def]
+		if scope == nil {
+			continue
+		}
+
+		propName := property.Content(file.Module().Source)
+		decls, exists := scope.Symbols[propName]
+		if !exists {
+			continue
+		}
+
+		for _, decl := range decls {
+			if nextFile.IsImport(decl) {
+				importedFile, importedExpr := cg.resolveImport(nextFile, decl, propName)
+				if importedFile != nil && importedExpr != nil {
+					results = append(results, ResolvedExpr{
+						File: importedFile,
+						Node: importedExpr,
+					})
+				}
+			} else {
+				results = append(results, ResolvedExpr{
+					File: nextFile,
+					Node: decl,
+				})
+			}
+
+		}
 	}
 
-	scope := nextFile.Module().ScopeOfNode[def]
-	if scope == nil {
-		return nil, nil
-	}
-
-	propName := property.Content(file.Module().Source)
-	decl := scope.Symbols[propName]
-	if decl == nil {
-		return nil, nil
-	}
-
-	if nextFile.IsImport(decl) {
-		return cg.resolveImport(nextFile, decl, propName)
-	}
-
-	return nextFile, decl
+	return results
 }
 
 // resolveCallExpr takes a call expression node, and
 // returns the function definition for the callee.
-func (cg *CallGraph) resolveCallExpr(file ParsedFile, callExpr *sitter.Node) (ParsedFile, *sitter.Node) {
+func (cg *CallGraph) resolveCallExpr(file ParsedFile, callExpr *sitter.Node) []ResolvedExpr {
 	scope := GetScope(file.Module(), callExpr)
 	if scope == nil {
-		return nil, nil
+		return nil
 	}
 
 	callee := file.GetCallee(callExpr)
 	if callee == nil {
-		return nil, nil
+		return nil
 	}
 
-	file, decl := cg.resolveExpr(file, callee)
-	if file.IsFunctionDef(decl) || file.IsImport(decl) {
-		return file, decl
-	} else {
-		return file, file.FunctionDefFromNode(decl)
+	var results []ResolvedExpr
+	resolvedExprs := cg.resolveExpr(file, callee)
+
+	for _, resolved := range resolvedExprs {
+		file, decl := resolved.File, resolved.Node
+		if file.IsFunctionDef(decl) || file.IsImport(decl) {
+			results = append(results, resolved)
+		} else {
+			defNode := file.FunctionDefFromNode(decl)
+			if defNode != nil {
+				results = append(results, ResolvedExpr{
+					File: file,
+					Node: defNode,
+				})
+			}
+		}
 	}
+
+	return results
 }
 
 // ToDotGraph converts a CallGraph to a dot graph for debugging/visualization
@@ -423,6 +512,7 @@ func (cg *CallGraph) resolveImport(file ParsedFile, importStmt *sitter.Node, cal
 	if originalName := file.NameOfAliasedImport(calleeName); originalName != nil {
 		calleeName = *originalName
 	}
+
 	def := importedFile.ResolveExportedSymbol(calleeName)
 	if def == nil {
 		return nil, nil
@@ -432,7 +522,6 @@ func (cg *CallGraph) resolveImport(file ParsedFile, importStmt *sitter.Node, cal
 	// e.g: foo = "bar" # py
 	// e.g: export const foo = "bar" // js
 	// in this case, also handle recursive imports :<
-
 	if importedFile.IsImport(def) {
 		return cg.resolveImport(importedFile, def, calleeName)
 	}

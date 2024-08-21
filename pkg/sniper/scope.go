@@ -42,7 +42,7 @@ type Scope struct {
 	Children []*Scope
 	// Symbols maps a name to an AST node that
 	// the name was initialized to
-	Symbols map[string]*sitter.Node
+	Symbols map[string][]*sitter.Node
 	// Name is the inverse-map of `Symbols`.
 	NameOfNode map[*sitter.Node]string
 	// (TODO)
@@ -83,7 +83,7 @@ func (s *Scope) toDotNode(g *dot.Graph) dot.Node {
 }
 
 // Lookup finds a symbol starting from the current scope and going up
-func (s *Scope) Lookup(name string) *sitter.Node {
+func (s *Scope) Lookup(name string) []*sitter.Node {
 	if s.Symbols[name] != nil {
 		return s.Symbols[name]
 	}
@@ -124,10 +124,10 @@ func makeLexicalScopeTree_(
 	decls := lang.GetDecls(node)
 	for _, decl := range decls {
 		writeExpr, name := decl.InitExpr, decl.Name
-		if writeExpr != nil && scope.Symbols[name] == nil {
+		if writeExpr != nil {
 			// add a new variable declaration to the scope
 			// if it doesn't exist already
-			scope.Symbols[name] = writeExpr
+			scope.Symbols[name] = append(scope.Symbols[name], writeExpr)
 			scope.NameOfNode[writeExpr] = name
 		}
 	}
@@ -137,7 +137,7 @@ func makeLexicalScopeTree_(
 		nextScope = &Scope{
 			AstNode:          node,
 			Parent:           scope,
-			Symbols:          make(map[string]*sitter.Node),
+			Symbols:          make(map[string][]*sitter.Node),
 			FilePathOfImport: make(map[*sitter.Node]string),
 			NameOfNode:       make(map[*sitter.Node]string),
 		}

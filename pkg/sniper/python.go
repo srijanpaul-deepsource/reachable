@@ -347,14 +347,14 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 	} else {
 		rootPath = *py.Module().ProjectRoot
 	}
+
 	modulePaths := []string{baseModulePath}
 	if itemName != "" {
-		modulePaths = append(modulePaths, filepath.Join(baseModulePath, itemName))
-	}
+		modulePaths = []string{filepath.Join(baseModulePath, itemName), baseModulePath}
+	} 
 
 	for _, relPath := range relPaths {
 		for _, modulePath := range modulePaths {
-			// fmt.Fprintf(os.Stderr, "%v  %v  %v\n", py.SitePackagesPath, relPath, modulePath)
 			possibleFiles := []string{
 				filepath.Join(rootPath, relPath, modulePath, "__init__.py"),
 				filepath.Join(rootPath, relPath, modulePath+".py"),
@@ -410,7 +410,12 @@ func (py *Python) FunctionDefFromNode(node *sitter.Node) *sitter.Node {
 
 func (py *Python) ResolveExportedSymbol(name string) *sitter.Node {
 	globalScope := py.Module().GlobalScope
-	return globalScope.Symbols[name]
+	nodes := globalScope.Symbols[name]
+	if len(nodes) == 0 {
+		return nil
+	}
+	// TODO: handle multiple possible assignments
+	return nodes[0]
 }
 
 func (py *Python) GetObjectAndProperty(node *sitter.Node) (*sitter.Node, *sitter.Node) {

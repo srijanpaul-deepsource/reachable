@@ -17,7 +17,10 @@
         "--lockfile",
         "./test-projects/pyproject/requirements.txt",
         "./test-projects/pyproject/src/mypackage/__main__.py"
-      ]
+      ],
+      "env": {
+        "CODE_PATH": "./test-projects/pyproject"
+      }
     }
   ]
 }

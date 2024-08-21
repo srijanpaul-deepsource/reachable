@@ -36,11 +36,11 @@ func Test_Scope(t *testing.T) {
 
 	assert.Contains(t, scope.Symbols, "foo")
 	assert.Contains(t, scope.Symbols, "x")
-	assert.Equal(t, "'x'", scope.Symbols["x"].Content(pyBytes))
+	assert.Equal(t, "'x'", scope.Symbols["x"][0].Content(pyBytes))
 
 	// test class decl: class Foo:
 	assert.Contains(t, scope.Symbols, "Foo")
-	assert.Equal(t, "class_definition", scope.Symbols["Foo"].Type())
+	assert.Equal(t, "class_definition", scope.Symbols["Foo"][0].Type())
 
 	// test assignment patterns: y, z = 1, 2
 	assert.Contains(t, scope.Symbols, "y")
@@ -48,9 +48,9 @@ func Test_Scope(t *testing.T) {
 
 	// type annotations a, b: Tuple[int, int] = 1, 2
 	assert.Contains(t, scope.Symbols, "a")
-	assert.Equal(t, "1", scope.Symbols["a"].Content(pyBytes))
+	assert.Equal(t, "1", scope.Symbols["a"][0].Content(pyBytes))
 	assert.Contains(t, scope.Symbols, "b")
-	assert.Equal(t, "2", scope.Symbols["b"].Content(pyBytes))
+	assert.Equal(t, "2", scope.Symbols["b"][0].Content(pyBytes))
 
 	assert.NotContains(t, scope.Symbols, "bar")
 
@@ -63,5 +63,5 @@ func Test_Scope(t *testing.T) {
 	child = child.Children[0]
 	require.NotNil(t, child)
 	require.Contains(t, child.Symbols, "baz")
-	assert.Equal(t, "420", child.Symbols["baz"].Content(pyBytes))
+	assert.Equal(t, "420", child.Symbols["baz"][0].Content(pyBytes))
 }
