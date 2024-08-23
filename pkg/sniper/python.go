@@ -101,6 +101,10 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 	if codePath == "" {
 		codePath, _ = os.Getwd()
 	}
+	if python.module.ProjectRoot == nil {
+		python.module.ProjectRoot = &codePath
+	}
+
 	sitePackagesPath, err := findVenvSitePackages(codePath)
 	if err == nil {
 		python.SitePackagesPath = sitePackagesPath
