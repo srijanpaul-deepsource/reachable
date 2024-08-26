@@ -184,7 +184,15 @@ func (cg *CallGraph) resolveExpr(file ParsedFile, node *sitter.Node) (ParsedFile
 		var nextNode *sitter.Node
 
 		if file.IsDottedExpr(node) {
-			nextFile, nextNode = cg.resolveDottedExpr(file, node)
+			// It's possible for a dotted expr to also be in the lookup table.
+			// This is because python imports are weird.
+			nextNode = cg.resolveIdentifier(file, node)
+			if nextNode != nil && file.IsImport(nextNode) {
+				name := node.Content(file.Module().Source)
+				nextFile, nextNode = cg.resolveImport(file, nextNode, name)
+			} else {
+				nextFile, nextNode = cg.resolveDottedExpr(file, node)
+			}
 		} else if node.Type() == "identifier" {
 			nextNode = cg.resolveIdentifier(file, node)
 			if nextNode != nil && file.IsImport(nextNode) {
@@ -238,7 +246,6 @@ func (cg *CallGraph) resolveDottedExpr(file ParsedFile, dottedExpr *sitter.Node)
 	if nextFile == nil || def == nil {
 		return nil, nil
 	}
-
 	if !slices.Contains(ScopeNodeTypes, def.Type()) {
 		return nil, nil
 	}
@@ -413,6 +420,9 @@ func (cg *CallGraph) resolveImport(file ParsedFile, importStmt *sitter.Node, cal
 	}
 
 	// Find the function definition in the module
+	if originalName := file.NameOfAliasedImport(calleeName); originalName != nil {
+		calleeName = *originalName
+	}
 	def := importedFile.ResolveExportedSymbol(calleeName)
 	if def == nil {
 		return nil, nil

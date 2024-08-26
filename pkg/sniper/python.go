@@ -87,12 +87,13 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 	projectRoot, _ := findProjectRoot(fileName)
 	python := &Python{
 		module: &Module{
-			FileName:         fileName,
-			Source:           source,
-			Language:         LangPy,
-			ProjectRoot:      projectRoot,
-			TsLanguage:       treeSitterPy.GetLanguage(),
-			FilePathOfImport: make(map[*sitter.Node]string),
+			FileName:            fileName,
+			Source:              source,
+			Language:            LangPy,
+			ProjectRoot:         projectRoot,
+			TsLanguage:          treeSitterPy.GetLanguage(),
+			FilePathOfImport:    make(map[*sitter.Node]string),
+			NameOfAliasedImport: make(map[string]string),
 		},
 	}
 
@@ -100,6 +101,10 @@ func ParsePython(fileName string, source []byte) (*Python, error) {
 	if codePath == "" {
 		codePath, _ = os.Getwd()
 	}
+	if python.module.ProjectRoot == nil {
+		python.module.ProjectRoot = &codePath
+	}
+
 	sitePackagesPath, err := findVenvSitePackages(codePath)
 	if err == nil {
 		python.SitePackagesPath = sitePackagesPath
@@ -193,6 +198,8 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 					{
 						aliasNode := nameNode.ChildByFieldName("alias")
 						name := aliasNode.Content(py.module.Source)
+						originalName := nameNode.ChildByFieldName("name").Content(py.module.Source)
+						py.module.NameOfAliasedImport[name] = originalName
 						decls = append(decls, Decl{name, node})
 					}
 				default:
@@ -207,17 +214,36 @@ func (py *Python) GetDecls(node *sitter.Node) []Decl {
 		{
 			// TODO: use children with field name and support multple.
 			module := node.ChildByFieldName("name")
-			if module.Type() == "dotted_name" {
+			decls := []Decl{}
+			switch module.Type() {
+			case "dotted_name":
 				name := module.Content(py.module.Source)
-				if strings.Contains(name, ".") {
-					// TODO: import dotted import statements (and handle in callgraph)
-				} else {
-					return []Decl{{name, node}}
+				for {
+					decls = append(decls, Decl{name, node})
+					lastDot := strings.LastIndex(name, ".")
+					if lastDot == -1 {
+						break
+					}
+					name = name[:lastDot]
 				}
+			case "aliased_import":
+				name := module.ChildByFieldName("alias").Content(py.module.Source)
+				originalName := module.ChildByFieldName("name").Content(py.module.Source)
+				py.module.NameOfAliasedImport[name] = originalName
+				decls = append(decls, Decl{name, node})
 			}
+			return decls
 		}
 	}
 
+	return nil
+}
+
+func (py *Python) NameOfAliasedImport(alias string) *string {
+	name, exists := py.module.NameOfAliasedImport[alias]
+	if exists {
+		return &name
+	}
 	return nil
 }
 
@@ -299,7 +325,12 @@ func (py *Python) FilePathOfImport(node *sitter.Node) *string {
 		itemName = node.ChildByFieldName("name").Content(py.module.Source)
 
 	} else if node.Type() == "import_statement" {
-		moduleName = node.ChildByFieldName("name").Content(py.module.Source)
+		module := node.ChildByFieldName("name")
+		if module.Type() == "aliased_import" {
+			moduleName = module.ChildByFieldName("name").Content(py.module.Source)
+		} else {
+			moduleName = module.Content(py.module.Source)
+		}
 		for strings.HasPrefix(moduleName, ".") {
 			moduleName = moduleName[1:]
 			upLevel++

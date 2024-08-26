@@ -9,14 +9,15 @@ type Module struct {
 	Ast *sitter.Node
 	// ProjectRoot is the root directory of the project to which
 	// this module belongs
-	ProjectRoot      *string
-	FileName         string
-	Source           []byte
-	GlobalScope      *Scope
-	ScopeOfNode      ScopeOfNode
-	TsLanguage       *sitter.Language
-	FilePathOfImport map[*sitter.Node]string
-	Language         Language
+	ProjectRoot         *string
+	FileName            string
+	Source              []byte
+	GlobalScope         *Scope
+	ScopeOfNode         ScopeOfNode
+	TsLanguage          *sitter.Language
+	FilePathOfImport    map[*sitter.Node]string
+	NameOfAliasedImport map[string]string
+	Language            Language
 }
 
 type Language int
@@ -76,6 +77,7 @@ type ParsedFile interface {
 	// TODO: single import can have multiple files that it imports. maybe this should
 	// return a map of imported node/node-name to the filepath instead.
 	FilePathOfImport(*sitter.Node) *string
+	NameOfAliasedImport(string) *string
 	// ResolveExportedSymbol resolves an exported symbol to its definition node
 	ResolveExportedSymbol(string) *sitter.Node
 
