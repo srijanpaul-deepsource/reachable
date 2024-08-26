@@ -53,6 +53,21 @@ func NewCallGraph() *CallGraph {
 	}
 }
 
+func (cg *CallGraph) addUnresolvedNode(file ParsedFile, node *sitter.Node) *CgNode {
+	calleeName := file.GetCalleeName(node)
+	if calleeName == nil {
+		return &CgNode{FuncName: calleeName, File: file}
+	}
+
+	cgNode, exists := cg.UnresolvedCgNodes[*calleeName]
+	if !exists {
+		cgNode = &CgNode{FuncName: calleeName, File: file}
+		cg.UnresolvedCgNodes[*calleeName] = cgNode
+	}
+
+	return cgNode
+}
+
 // FindCallGraph finds a call-graph corresponding to a call-expression node.
 func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 	if !file.IsCallExpr(node) {
@@ -80,24 +95,12 @@ func (cg *CallGraph) FindCallGraph(file ParsedFile, node *sitter.Node) *CgNode {
 	// y = f(1) // <- `f` can be either of the lambdas.
 	// ```
 	if len(resolvedCallExpr) == 0 {
-		return nil
+		return cg.addUnresolvedNode(file, node)
 	}
 
 	nextFile, nextNode := resolvedCallExpr[0].File, resolvedCallExpr[0].Node
 	if nextNode == nil {
-		calleeName := file.GetCalleeName(node)
-		if calleeName != nil {
-			cgNode, exists := cg.UnresolvedCgNodes[*calleeName]
-			if exists {
-				return cgNode
-			}
-		}
-
-		cgNode := &CgNode{FuncName: calleeName, File: file}
-		if calleeName != nil {
-			cg.UnresolvedCgNodes[*calleeName] = cgNode
-		}
-		return cgNode
+		return cg.addUnresolvedNode(file, node)
 	}
 
 	if nextFile.IsImport(nextNode) {
@@ -307,6 +310,7 @@ func (cg *CallGraph) resolveDottedExpr(file ParsedFile, dottedExpr *sitter.Node)
 		if nextFile == nil || def == nil {
 			continue
 		}
+
 		if !slices.Contains(ScopeNodeTypes, def.Type()) {
 			continue
 		}
